@@ -81,7 +81,7 @@ module.directive('mlJobSelectList', function (Private) {
               $scope.selected.groups.push({
                 id: group.id,
                 selected: group.selected,
-                // TODO: is the selectable property of a group still needed?
+                // TODO: is the selectable property of a group still needed? TEST
                 selectable: group.selectable,
                 timeRange: group.timeRange,
                 isGroup: true,
