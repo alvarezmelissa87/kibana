@@ -27,6 +27,9 @@ import { mlChartTooltipService } from '../components/chart_tooltip/chart_tooltip
 import { mlExplorerDashboardService } from './explorer_dashboard_service';
 import { DRAG_SELECT_ACTION } from './explorer_constants';
 import { injectI18n } from '@kbn/i18n/react';
+import {
+  EuiButtonEmpty
+} from '@elastic/eui';
 
 export const ExplorerSwimlane = injectI18n(class ExplorerSwimlane extends React.Component {
   static propTypes = {
@@ -213,6 +216,22 @@ export const ExplorerSwimlane = injectI18n(class ExplorerSwimlane extends React.
     wrapper.selectAll('.ds-selected').classed('sl-cell-inner-selected', false);
   }
 
+  getFilterIcon(lane) {
+    return (
+      // <EuiButtonIcon
+      //   iconType="plusInCircle"
+      //   aria-label="Add Filter"
+      //   onClick={() => console.log('clicked icon', lane)}
+      // />
+      <EuiButtonEmpty
+        iconType="plusInCirlce"
+        onClick={() => console.log(lane)}
+      >
+        {lane}
+      </EuiButtonEmpty>
+    );
+  }
+
   renderSwimlane() {
     const element = d3.select(this.rootNode.parentNode);
 
@@ -225,7 +244,9 @@ export const ExplorerSwimlane = injectI18n(class ExplorerSwimlane extends React.
       swimlaneData,
       swimlaneType,
       selection,
-      intl
+      intl,
+      filterActive,
+      maskAll
     } = this.props;
 
     const {
@@ -303,8 +324,8 @@ export const ExplorerSwimlane = injectI18n(class ExplorerSwimlane extends React.
 
     const d3Lanes = swimlanes.selectAll('.lane').data(lanes);
     const d3LanesEnter = d3Lanes.enter().append('div').classed('lane', true);
-
-    d3LanesEnter.append('div')
+    // AROUND HERE IS WHERE WE'D NEED TO ADD THE TOOL TIP FOR ADDING A FILTER
+    d3LanesEnter.append('div') // maybe append a react button with the plus icon with the label as the text here
       .classed('lane-label', true)
       .style('width', `${laneLabelWidth}px`)
       .html(label => mlEscape(label))
@@ -472,6 +493,18 @@ export const ExplorerSwimlane = injectI18n(class ExplorerSwimlane extends React.
 
     if (cellsToSelect.length > 1 || selectedMaxBucketScore > 0) {
       this.highlightSelection(cellsToSelect, selectedLanes, selectedTimes);
+    } else if (filterActive === true) {
+      // mask overall and job ID lanes
+      if (maskAll) {
+        // This selects both overall and viewby swimlane
+        const allSwimlanes = d3.selectAll('.ml-explorer-swimlane');
+        allSwimlanes.selectAll('.lane-label').classed('lane-label-masked', true);
+        allSwimlanes.selectAll('.sl-cell-inner,.sl-cell-inner-dragselect').classed('sl-cell-inner-masked', true);
+      } else {
+        const overallSwimlane = d3.select('ml-explorer-swimlane[swimlane-type="overall"]');
+        overallSwimlane.selectAll('.lane-label').classed('lane-label-masked', true);
+        overallSwimlane.selectAll('.sl-cell-inner,.sl-cell-inner-dragselect').classed('sl-cell-inner-masked', true);
+      }
     } else {
       this.clearSelection();
     }

@@ -38,7 +38,7 @@ export function resultsServiceProvider(callWithRequest) {
     dateFormatTz,
     maxRecords = ANOMALIES_TABLE_DEFAULT_QUERY_SIZE,
     maxExamples = DEFAULT_MAX_EXAMPLES) {
-
+    console.log('GET ANOMALIES TABLE DATA: jobIds, criteriaFields, influencers:', jobIds, criteriaFields, influencers);
     // Build the query to return the matching anomaly record results.
     // Add criteria for the time range, record score, plus any specified job IDs.
     const boolCriteria = [
@@ -117,7 +117,7 @@ export function resultsServiceProvider(callWithRequest) {
         }
       });
     }
-
+    console.log('GET ANOMALIES TABLE DATA: BOOL CRITERIA', ML_RESULTS_INDEX_PATTERN, boolCriteria); // remove
     const resp = await callWithRequest('search', {
       index: ML_RESULTS_INDEX_PATTERN,
       rest_total_hits_as_int: true,

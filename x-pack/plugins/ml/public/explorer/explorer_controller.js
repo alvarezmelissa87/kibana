@@ -96,6 +96,7 @@ module.controller('MlExplorerController', function (
   $scope.chartsData = getDefaultChartsData();
   $scope.timeFieldName = 'timestamp';
   $scope.loading = true;
+  $scope.filterData = undefined; // Does this need default values?
   timefilter.enableTimeRangeSelector();
   timefilter.enableAutoRefreshSelector();
 
@@ -205,6 +206,84 @@ module.controller('MlExplorerController', function (
 
     mlExplorerDashboardService.init();
   };
+
+  $scope.applyFilter = function (queryClauses, formattedQuery) {
+    // If query is empty object we clear any existing selection,
+    // otherwise we save the new selection in AppState and update the Explorer.
+    if (queryClauses.length === 0) {
+      // Reload 'view by' swimlane over full time range.
+      loadViewBySwimlane([]);
+      $scope.filterData = undefined;
+      $scope.appState.fetch();
+      $scope.appState.mlExplorerSwimlane.filterActive = false;
+      $scope.appState.mlExplorerSwimlane.maskAll = false;
+      $scope.appState.save();
+      clearSelectedAnomalies();
+      updateExplorer();
+    } else {
+      const filterData = getFilterData(queryClauses);
+      filterData.formattedQuery = formattedQuery;
+      $scope.appState.fetch();
+      $scope.appState.mlExplorerSwimlane.filterActive = true;
+      $scope.appState.mlExplorerSwimlane.selectedType = filterData.type;
+      $scope.appState.mlExplorerSwimlane.maskAll = ($scope.appState.mlExplorerSwimlane.viewBy === VIEW_BY_JOB_LABEL ||
+        filterData.fieldNames.includes($scope.appState.mlExplorerSwimlane.viewBy) === false);
+      $scope.appState.save();
+      $scope.filterData = filterData;
+      updateExplorer();
+    }
+  };
+
+  function getFilterData(queryClauses) {
+    const timerange = getSelectionTimeRange($scope.cellData);
+    const criteriaFields = []; // [{ fieldName: country_code, fieldValue: 'FR' }]
+    const influencerCriteriaFields = [];
+    let fieldValues = []; // ['FR']
+    let fieldNames = [];
+
+    if (queryClauses.length > 0 && queryClauses.length === 1) {
+      // it's an influencer field
+      if ($scope.viewBySwimlaneOptions.includes(queryClauses[0].field)) {
+        influencerCriteriaFields.push({
+          fieldName: queryClauses[0].field,
+          fieldValue: queryClauses[0].value.text || queryClauses[0].value });
+      } else {
+        criteriaFields.push({ fieldName: queryClauses[0].field, fieldValue: queryClauses[0].value.text || queryClauses[0].value });
+      }
+      fieldValues.push(queryClauses[0].value.text || queryClauses[0].value);
+      fieldNames.push(queryClauses[0].field);
+
+      return {
+        type: 'viewBy',
+        lanes: [queryClauses[0].value],
+        times: [timerange.earliestMs, timerange.latestMs],
+        criteriaFields,
+        influencerCriteriaFields,
+        fieldValues,
+        fieldNames
+      };
+    } else if (queryClauses.length > 0 && queryClauses.length > 1) {
+      queryClauses.forEach((clause) => {
+        if ($scope.viewBySwimlaneOptions.includes(clause.field)) {
+          influencerCriteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
+        } else {
+          criteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
+        }
+      });
+      // search terms with / get interpreted as dates
+      fieldValues = queryClauses.map((clause) => clause.value.text || clause.value);
+      fieldNames = queryClauses.map((clause) => clause.field);
+      // TODO: lanes, type needs to be set correctly
+      return {
+        type: 'viewBy',
+        lanes: fieldValues,
+        times: [timerange.earliestMs, timerange.latestMs],
+        criteriaFields,
+        fieldValues,
+        fieldNames
+      };
+    }
+  }
 
   // create new job objects based on standard job config objects
   // new job objects just contain job id, bucket span in seconds and a selected flag.
@@ -421,7 +500,7 @@ module.controller('MlExplorerController', function (
     return { earliestMs, latestMs };
   }
 
-  function getSelectionInfluencers(cellData) {
+  function getSelectionInfluencers(cellData, filterData) {
     const influencers = [];
 
     if (
@@ -432,6 +511,9 @@ module.controller('MlExplorerController', function (
       cellData.lanes.forEach((laneLabel) =>{
         influencers.push({ fieldName: $scope.swimlaneViewByFieldName, fieldValue: laneLabel });
       });
+    } else if (filterData !== undefined) {
+      // If fields to filter by are already influencers push into influencers
+      influencers.push(...filterData.influencerCriteriaFields);
     }
 
     return influencers;
@@ -536,7 +618,7 @@ module.controller('MlExplorerController', function (
   function loadDataForCharts(jobIds, earliestMs, latestMs, influencers = []) {
     // Just skip doing the request when this function
     // is called without the minimum required data.
-    if ($scope.cellData === undefined && influencers.length === 0) {
+    if ($scope.cellData === undefined && influencers.length === 0 && $scope.filterData === undefined) {
       return;
     }
 
@@ -552,8 +634,8 @@ module.controller('MlExplorerController', function (
         if (newRequestCount < requestCount) {
           return;
         }
-
-        if ($scope.cellData !== undefined && _.keys($scope.cellData).length > 0) {
+        // TODO: make sure this conditional for processing records is correct
+        if (($scope.cellData !== undefined && _.keys($scope.cellData).length > 0) || influencers.length > 0) {
           $scope.anomalyChartRecords = resp.records;
           console.log('Explorer anomaly charts data set:', $scope.anomalyChartRecords);
 
@@ -568,7 +650,8 @@ module.controller('MlExplorerController', function (
         // so check if it's still present. This can happen if a cell selection
         // gets restored from URL/AppState and we find out it's not applicable
         // to the view by swimlanes currently on display.
-        if ($scope.cellData === undefined) {
+        // TODO: double check this conditional as well
+        if ($scope.cellData === undefined && $scope.filterData === undefined) {
           return;
         }
 
@@ -790,6 +873,7 @@ module.controller('MlExplorerController', function (
   }
 
   function loadTopInfluencers(selectedJobIds, earliestMs, latestMs, influencers = []) {
+
     if ($scope.noInfluencersConfigured !== true) {
       mlResultsService.getTopInfluencers(
         selectedJobIds,
@@ -810,6 +894,7 @@ module.controller('MlExplorerController', function (
   }
 
   function loadViewBySwimlane(fieldValues) {
+
     // reset the swimlane data to avoid flickering where the old dataset would briefly show up.
     $scope.viewBySwimlaneData = getDefaultViewBySwimlaneData();
     $scope.viewBySwimlaneDataLoading = true;
@@ -869,8 +954,10 @@ module.controller('MlExplorerController', function (
       // load scores by influencer/jobId value and time.
       // Pass the interval in seconds as the swimlane relies on a fixed number of seconds between buckets
       // which wouldn't be the case if e.g. '1M' was used.
+
       const interval = $scope.swimlaneBucketInterval.asSeconds() + 's';
       if ($scope.swimlaneViewByFieldName !== VIEW_BY_JOB_LABEL) {
+
         mlResultsService.getInfluencerValueMaxScoreByTime(
           selectedJobIds,
           $scope.swimlaneViewByFieldName,
@@ -881,6 +968,7 @@ module.controller('MlExplorerController', function (
           swimlaneLimit
         ).then(finish);
       } else {
+
         const jobIds = (fieldValues !== undefined && fieldValues.length > 0) ? fieldValues : selectedJobIds;
         mlResultsService.getScoresByBucket(
           jobIds,
@@ -894,6 +982,7 @@ module.controller('MlExplorerController', function (
   }
 
   function loadViewBySwimlaneForSelectedTime(earliestMs, latestMs) {
+
     const selectedJobIds = $scope.getSelectedJobIds();
     const limit = mlSelectLimitService.state.get('limit');
     const swimlaneLimit = (limit === undefined) ? SWIMLANE_DEFAULT_LIMIT : limit.val;
@@ -907,6 +996,7 @@ module.controller('MlExplorerController', function (
         latestMs,
         swimlaneLimit
       ).then((resp) => {
+
         const topFieldValues = [];
         const topInfluencers = resp.influencers[$scope.swimlaneViewByFieldName];
         _.each(topInfluencers, (influencerData) => {
@@ -914,6 +1004,7 @@ module.controller('MlExplorerController', function (
             topFieldValues.push(influencerData.influencerFieldValue);
           }
         });
+
         loadViewBySwimlane(topFieldValues);
       });
     } else {
@@ -966,16 +1057,17 @@ module.controller('MlExplorerController', function (
     }
   }
 
-  function loadAnomaliesTableData() {
+  function loadAnomaliesTableData(criteriaFields = []) {
     const cellData = $scope.cellData;
+    const filterData = $scope.filterData;
     const jobIds = ($scope.cellData !== undefined && cellData.fieldName === VIEW_BY_JOB_LABEL) ?
       cellData.lanes : $scope.getSelectedJobIds();
-    const influencers = getSelectionInfluencers(cellData);
+    const influencers = getSelectionInfluencers(cellData, filterData);
     const timeRange = getSelectionTimeRange(cellData);
 
     ml.results.getAnomaliesTableData(
       jobIds,
-      [],
+      criteriaFields,
       influencers,
       mlSelectIntervalService.state.get('interval').val,
       mlSelectSeverityService.state.get('threshold').val,
@@ -1027,37 +1119,49 @@ module.controller('MlExplorerController', function (
   }
 
   function updateExplorer() {
-    const cellData = $scope.cellData;
 
+    const cellData = $scope.cellData;
+    const filterData = $scope.filterData;
     const jobIds = (cellData !== undefined && cellData.fieldName === VIEW_BY_JOB_LABEL) ? cellData.lanes : $scope.getSelectedJobIds();
     const timerange = getSelectionTimeRange(cellData);
-    const influencers = getSelectionInfluencers(cellData);
+    const influencers = getSelectionInfluencers(cellData, filterData);
 
     // The following is to avoid running into a race condition where loading a swimlane selection from URL/AppState
     // would fail because the Explorer Charts Container's directive wasn't linked yet and not being subscribed
     // to the anomalyDataChange listener used in loadDataForCharts().
     async function finish() {
+
       setShowViewBySwimlane();
 
       await loadAnnotationsTableData();
 
       $timeout(() => {
+
         anomalyDataChange($scope.anomalyChartRecords || [], timerange.earliestMs, timerange.latestMs);
 
-        if (cellData !== undefined && cellData.fieldName === undefined) {
+        if ((cellData !== undefined && cellData.fieldName === undefined)) {
           // Click is in one of the cells in the Overall swimlane - reload the 'view by' swimlane
           // to show the top 'view by' values for the selected time.
           loadViewBySwimlaneForSelectedTime(timerange.earliestMs, timerange.latestMs);
           $scope.viewByLoadedForTimeFormatted = formatHumanReadableDateTime(timerange.earliestMs);
+        } else if (filterData !== undefined && filterData.fieldValues) {
+          $scope.appState.fetch();
+          let fieldValues = [];
+          if ($scope.appState.mlExplorerSwimlane.viewBy !== VIEW_BY_JOB_LABEL && $scope.appState.mlExplorerSwimlane.maskAll === false) {
+            fieldValues = filterData.fieldValues;
+          }
+          // filter swimlane by selected influencers if in view by mode
+          loadViewBySwimlane(fieldValues);
         }
 
         if (influencers.length === 0) {
           loadTopInfluencers(jobIds, timerange.earliestMs, timerange.latestMs);
           loadDataForCharts(jobIds, timerange.earliestMs, timerange.latestMs);
         } else {
+          // loadDataForCharts calls loadTopInfluencers
           loadDataForCharts(jobIds, timerange.earliestMs, timerange.latestMs, influencers);
         }
-        loadAnomaliesTableData();
+        loadAnomaliesTableData(filterData && filterData.criteriaFields);
       }, 0);
     }
 

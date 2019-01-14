@@ -269,6 +269,7 @@ function getTopInfluencers(
   latestMs,
   maxFieldValues = 10,
   influencers = []) {
+
   return new Promise((resolve, reject) => {
     const obj = { success: true, influencers: {} };
 
@@ -328,7 +329,7 @@ function getTopInfluencers(
         }
       });
     }
-
+    console.log('GET TOP INFLUENCERS BOOL CRITERIA', boolCriteria); // remove
     ml.esSearch({
       index: ML_RESULTS_INDEX_PATTERN,
       size: 0,
@@ -817,6 +818,7 @@ function getRecordInfluencers(jobIds, threshold, earliestMs, latestMs, maxResult
 // so this returns record level results which have at least one of the influencers.
 // Pass an empty array or ['*'] to search over all job IDs.
 function getRecordsForInfluencer(jobIds, influencers, threshold, earliestMs, latestMs, maxResults) {
+  console.log('GET-RESULTS-FOR-INFLUENCER', jobIds, influencers); // remove
   return new Promise((resolve, reject) => {
     const obj = { success: true, records: [] };
 
@@ -889,6 +891,7 @@ function getRecordsForInfluencer(jobIds, influencers, threshold, earliestMs, lat
         }
       });
     }
+    console.log('GET-RESULTS-FOR-INFLUENCER BOOL CRITERIA', boolCriteria); // remove
 
     ml.esSearch({
       index: ML_RESULTS_INDEX_PATTERN,

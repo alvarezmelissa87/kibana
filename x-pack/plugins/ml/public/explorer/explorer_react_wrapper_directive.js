@@ -44,6 +44,8 @@ module.directive('mlExplorerReactWrapper', function (Private) {
         swimlaneData: getSwimlaneData(swimlaneType),
         swimlaneType,
         selection: scope.appState.mlExplorerSwimlane,
+        filterActive: scope.appState.mlExplorerSwimlane.filterActive,
+        maskAll: scope.appState.mlExplorerSwimlane.maskAll
       };
     }
 
@@ -51,6 +53,7 @@ module.directive('mlExplorerReactWrapper', function (Private) {
       const props = pick(scope, [
         'annotationsData',
         'anomalyChartRecords',
+        'applyFilter',
         'chartsData',
         'hasResults',
         'influencers',

@@ -19,6 +19,7 @@ import {
   EuiIconTip,
   EuiSelect,
   EuiSpacer,
+  EuiSearchBar
 } from '@elastic/eui';
 
 import { AnnotationsTable } from '../components/annotations_table';
@@ -54,6 +55,7 @@ export const Explorer = injectI18n(
     static propTypes = {
       annotationsData: PropTypes.array,
       anomalyChartRecords: PropTypes.array,
+      applyFilter: PropTypes.func,
       hasResults: PropTypes.bool,
       influencers: PropTypes.object,
       jobs: PropTypes.array,
@@ -73,6 +75,57 @@ export const Explorer = injectI18n(
 
     onSwimlaneEnterHandler = () => this.props.setSwimlaneSelectActive(true);
     onSwimlaneLeaveHandler = () => this.props.setSwimlaneSelectActive(false);
+
+    // Param looks like {query: Query, queryText: "he", error: null}
+    // TODO: Validate query before calling applyFilter to ensure it's complete and fieldName/fieldValue are valid + wrap in try catch
+    // TODO: wrap in SINGLE QUOTES anything with special characters in it - ensure useful error message shows up
+    handleFilterChange = ({ query, error }) => {
+      if (!query && error) {
+        // TODO: add error message below searchbar
+        console.log('Error processing filter query', error);
+        this.props.applyFilter([]);
+      } else {
+        const formattedQuery = EuiSearchBar.Query.toESQuery(query);
+        const queryClauses = query.ast.clauses;
+
+        this.props.applyFilter(queryClauses, formattedQuery);
+      }
+    }
+
+    // Start with displayed top influencers then maybe a load more option button?
+    renderSearch = () => {
+      const { influencers } = this.props;
+      const initialQuery = EuiSearchBar.Query.MATCH_ALL;
+      let filters = [];
+
+      if (influencers !== undefined) {
+        filters = Object.keys(influencers).map((influencerName) => {
+          return {
+            type: 'field_value_selection',
+            field: influencerName,
+            name: influencerName,
+            multiSelect: true,
+            options: influencers[influencerName].map((influencer) =>
+              ({ value: influencer.influencerFieldValue, view: influencer.influencerFieldValue }))
+          };
+        });
+      }
+
+      return (
+        <div className="mlAnomalyExploer__filterBar">
+          <EuiSearchBar
+            defaultQuery={initialQuery}
+            box={{
+              placeholder: 'e.g. type:visualization -is:active joe',
+              incremental: false,
+              schema: {}
+            }}
+            filters={(filters)}
+            onChange={this.handleFilterChange}
+          />
+        </div>
+      );
+    }
 
     render() {
       const {
@@ -119,6 +172,9 @@ export const Explorer = injectI18n(
 
       return (
         <div className="results-container">
+
+          {noInfluencersConfigured === false && influencers !== undefined && this.renderSearch()}
+
           {noInfluencersConfigured && (
             <div className="no-influencers-warning">
               <EuiIconTip
