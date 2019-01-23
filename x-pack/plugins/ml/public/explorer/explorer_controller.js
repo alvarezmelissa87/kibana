@@ -279,8 +279,9 @@ module.controller('MlExplorerController', function (
         lanes: fieldValues,
         times: [timerange.earliestMs, timerange.latestMs],
         criteriaFields,
-        fieldValues,
-        fieldNames
+        influencerCriteriaFields,
+        fieldValues: _.uniq(fieldValues),
+        fieldNames: _.uniq(fieldNames)
       };
     }
   }

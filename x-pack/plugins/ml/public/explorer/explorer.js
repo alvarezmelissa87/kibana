@@ -71,6 +71,15 @@ export const Explorer = injectI18n(
       viewBySwimlaneOptions: PropTypes.array,
     };
 
+    constructor(props) {
+      super(props);
+      const initialQuery = EuiSearchBar.Query.MATCH_ALL;
+      this.state = {
+        query: initialQuery,
+        error: null
+      };
+    }
+
     viewByChangeHandler = e => this.props.setSwimlaneViewBy(e.target.value);
 
     onSwimlaneEnterHandler = () => this.props.setSwimlaneSelectActive(true);
@@ -80,22 +89,29 @@ export const Explorer = injectI18n(
     // TODO: Validate query before calling applyFilter to ensure it's complete and fieldName/fieldValue are valid + wrap in try catch
     // TODO: wrap in SINGLE QUOTES anything with special characters in it - ensure useful error message shows up
     handleFilterChange = ({ query, error }) => {
-      if (!query && error) {
+      if (error) {
         // TODO: add error message below searchbar
         console.log('Error processing filter query', error);
-        this.props.applyFilter([]);
+        this.setState({ error });
+        this.props.applyFilter([]); // do we want to do this? would clear out last filter
       } else {
         const formattedQuery = EuiSearchBar.Query.toESQuery(query);
         const queryClauses = query.ast.clauses;
+
+        this.setState({
+          error: null,
+          query
+        });
 
         this.props.applyFilter(queryClauses, formattedQuery);
       }
     }
 
     // Start with displayed top influencers then maybe a load more option button?
+    // Store filters in state to reduce work on render?
     renderSearch = () => {
       const { influencers } = this.props;
-      const initialQuery = EuiSearchBar.Query.MATCH_ALL;
+      const { initialQuery } = this.state;
       let filters = [];
 
       if (influencers !== undefined) {
