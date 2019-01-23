@@ -156,7 +156,7 @@ export const Explorer = injectI18n(
           // };
         });
 
-        schema.strict = true;
+        // schema.strict = true;
       }
 
       return (
