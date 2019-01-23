@@ -238,53 +238,108 @@ module.controller('MlExplorerController', function (
     const timerange = getSelectionTimeRange($scope.cellData);
     const criteriaFields = []; // [{ fieldName: country_code, fieldValue: 'FR' }]
     const influencerCriteriaFields = [];
-    let fieldValues = []; // ['FR']
-    let fieldNames = [];
+    const fieldValues = []; // ['FR']
+    const fieldNames = [];
+    const lanes = [];
 
-    if (queryClauses.length > 0 && queryClauses.length === 1) {
+    queryClauses.forEach((clause) => {
+      fieldNames.push(clause.field);
+
       // it's an influencer field
-      if ($scope.viewBySwimlaneOptions.includes(queryClauses[0].field)) {
-        influencerCriteriaFields.push({
-          fieldName: queryClauses[0].field,
-          fieldValue: queryClauses[0].value.text || queryClauses[0].value });
-      } else {
-        criteriaFields.push({ fieldName: queryClauses[0].field, fieldValue: queryClauses[0].value.text || queryClauses[0].value });
-      }
-      fieldValues.push(queryClauses[0].value.text || queryClauses[0].value);
-      fieldNames.push(queryClauses[0].field);
+      if ($scope.viewBySwimlaneOptions.includes(clause.field)) {
 
-      return {
-        type: 'viewBy',
-        lanes: [queryClauses[0].value],
-        times: [timerange.earliestMs, timerange.latestMs],
-        criteriaFields,
-        influencerCriteriaFields,
-        fieldValues,
-        fieldNames
-      };
-    } else if (queryClauses.length > 0 && queryClauses.length > 1) {
-      queryClauses.forEach((clause) => {
-        if ($scope.viewBySwimlaneOptions.includes(clause.field)) {
-          influencerCriteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
+        if (clause.value.text !== undefined) {
+          influencerCriteriaFields.push({
+            fieldName: clause.field,
+            fieldValue: clause.value.text
+          });
+
+          fieldValues.push(clause.value.text);
+          lanes.push(clause.value.text);
         } else {
-          criteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
+          clause.value.forEach((value) => {
+            influencerCriteriaFields.push({
+              fieldName: clause.field,
+              fieldValue: value
+            });
+
+            fieldValues.push(value);
+            lanes.push(value);
+          });
         }
-      });
-      // search terms with / get interpreted as dates
-      fieldValues = queryClauses.map((clause) => clause.value.text || clause.value);
-      fieldNames = queryClauses.map((clause) => clause.field);
-      // TODO: lanes, type needs to be set correctly
-      return {
-        type: 'viewBy',
-        lanes: fieldValues,
-        times: [timerange.earliestMs, timerange.latestMs],
-        criteriaFields,
-        influencerCriteriaFields,
-        fieldValues: _.uniq(fieldValues),
-        fieldNames: _.uniq(fieldNames)
-      };
-    }
+      } else {
+        clause.value.forEach((value) => {
+          criteriaFields.push({
+            fieldName: clause.field,
+            fieldValue: value
+          });
+        });
+      }
+    });
+
+    return {
+      type: 'viewBy',
+      lanes,
+      times: [timerange.earliestMs, timerange.latestMs],
+      criteriaFields,
+      influencerCriteriaFields,
+      fieldValues,
+      fieldNames
+    };
   }
+  // This was for the query returned with multiSelect: true for SearchBar filters
+  // refactored to use 'or' - keeping this around just til testing ends in case
+  // function getFilterDataDup(queryClauses) {
+  //   const timerange = getSelectionTimeRange($scope.cellData);
+  //   const criteriaFields = []; // [{ fieldName: country_code, fieldValue: 'FR' }]
+  //   const influencerCriteriaFields = [];
+  //   let fieldValues = []; // ['FR']
+  //   let fieldNames = [];
+
+  //   if (queryClauses.length > 0 && queryClauses.length === 1) {
+  //     // it's an influencer field
+  //     if ($scope.viewBySwimlaneOptions.includes(queryClauses[0].field)) {
+  //       influencerCriteriaFields.push({
+  //         fieldName: queryClauses[0].field,
+  //         fieldValue: queryClauses[0].value.text || queryClauses[0].value });
+  //     } else {
+  //       criteriaFields.push({ fieldName: queryClauses[0].field, fieldValue: queryClauses[0].value.text || queryClauses[0].value });
+  //     }
+  //     fieldValues.push(queryClauses[0].value.text || queryClauses[0].value);
+  //     fieldNames.push(queryClauses[0].field);
+
+  //     return {
+  //       type: 'viewBy',
+  //       lanes: [queryClauses[0].value],
+  //       times: [timerange.earliestMs, timerange.latestMs],
+  //       criteriaFields,
+  //       influencerCriteriaFields,
+  //       fieldValues,
+  //       fieldNames
+  //     };
+  //   } else if (queryClauses.length > 0 && queryClauses.length > 1) {
+  //     queryClauses.forEach((clause) => {
+  //       if ($scope.viewBySwimlaneOptions.includes(clause.field)) {
+  //         influencerCriteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
+  //       } else {
+  //         criteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
+  //       }
+  //     });
+  //     // search terms with / get interpreted as dates
+  //     fieldValues = queryClauses.map((clause) => clause.value.text || clause.value);
+  //     fieldNames = queryClauses.map((clause) => clause.field);
+  //     // TODO: lanes, type needs to be set correctly
+  //     return {
+  //       type: 'viewBy',
+  //       lanes: fieldValues,
+  //       times: [timerange.earliestMs, timerange.latestMs],
+  //       criteriaFields,
+  //       influencerCriteriaFields,
+  //       fieldValues: _.uniq(fieldValues),
+  //       fieldNames: _.uniq(fieldNames)
+  //     };
+  //   }
+  // }
 
   // create new job objects based on standard job config objects
   // new job objects just contain job id, bucket span in seconds and a selected flag.

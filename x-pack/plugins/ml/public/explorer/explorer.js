@@ -9,10 +9,11 @@
  */
 
 import PropTypes from 'prop-types';
-import React from 'react';
+import React, { Fragment } from 'react';
 import { FormattedMessage, injectI18n } from '@kbn/i18n/react';
 
 import {
+  EuiCallOut,
   EuiFlexGroup,
   EuiFlexItem,
   EuiFormRow,
@@ -90,10 +91,9 @@ export const Explorer = injectI18n(
     // TODO: wrap in SINGLE QUOTES anything with special characters in it - ensure useful error message shows up
     handleFilterChange = ({ query, error }) => {
       if (error) {
-        // TODO: add error message below searchbar
         console.log('Error processing filter query', error);
         this.setState({ error });
-        this.props.applyFilter([]); // do we want to do this? would clear out last filter
+        // this.props.applyFilter([]); // Not sure we want to do this as it would clear out last filter
       } else {
         const formattedQuery = EuiSearchBar.Query.toESQuery(query);
         const queryClauses = query.ast.clauses;
@@ -107,24 +107,56 @@ export const Explorer = injectI18n(
       }
     }
 
+    renderError() {
+      const { error } = this.state;
+      if (!error) {
+        return;
+      }
+      return (
+        <Fragment>
+          <EuiSpacer size="s" />
+          <EuiCallOut
+            iconType="faceSad"
+            color="danger"
+            title={`Invalid search: ${error.message}`}
+          />
+          <EuiSpacer size="l" />
+        </Fragment>
+      );
+    }
+
     // Start with displayed top influencers then maybe a load more option button?
     // Store filters in state to reduce work on render?
     renderSearch = () => {
       const { influencers } = this.props;
       const { initialQuery } = this.state;
-      let filters = [];
+      const schema = {};
+      const filters = [];
 
       if (influencers !== undefined) {
-        filters = Object.keys(influencers).map((influencerName) => {
-          return {
+        Object.keys(influencers).forEach((influencerName) => {
+          const options = influencers[influencerName].map((influencer) =>
+            ({ value: influencer.influencerFieldValue, view: influencer.influencerFieldValue }));
+
+          filters.push({
             type: 'field_value_selection',
             field: influencerName,
             name: influencerName,
-            multiSelect: true,
-            options: influencers[influencerName].map((influencer) =>
-              ({ value: influencer.influencerFieldValue, view: influencer.influencerFieldValue }))
-          };
+            multiSelect: 'or',
+            options
+          });
+
+          // schema[influencerName] = {
+          //   type: 'string',
+          //   validate: (value) => {
+          //     if(!options.some(option => option.value === value)) {
+          //       throw new Error(`Invalid value ${value} for field ${influencerName}`);
+          //     }
+          //   }
+          // };
         });
+
+        schema.strict = true;
       }
 
       return (
@@ -132,13 +164,14 @@ export const Explorer = injectI18n(
           <EuiSearchBar
             defaultQuery={initialQuery}
             box={{
-              placeholder: 'e.g. type:visualization -is:active joe',
+              placeholder: 'e.g. type:(visualization or search) type:text',
               incremental: false,
-              schema: {}
+              schema
             }}
             filters={(filters)}
             onChange={this.handleFilterChange}
           />
+          {this.renderError()}
         </div>
       );
     }
