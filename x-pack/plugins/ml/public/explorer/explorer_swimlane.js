@@ -460,8 +460,9 @@ export const ExplorerSwimlane = injectI18n(class ExplorerSwimlane extends React.
       element.selectAll('.sl-cell-inner').classed('sl-cell-inner-masked', true);
     }
 
-    if ((swimlaneType !== selectedType) ||
-      (swimlaneData.fieldName !== undefined && swimlaneData.fieldName !== viewBy)) {
+    if (((swimlaneType !== selectedType) ||
+      (swimlaneData.fieldName !== undefined && swimlaneData.fieldName !== viewBy)) &&
+      filterActive === false) {
       // Not this swimlane which was selected.
       return;
     }

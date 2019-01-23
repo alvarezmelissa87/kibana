@@ -287,59 +287,6 @@ module.controller('MlExplorerController', function (
       fieldNames
     };
   }
-  // This was for the query returned with multiSelect: true for SearchBar filters
-  // refactored to use 'or' - keeping this around just til testing ends in case
-  // function getFilterDataDup(queryClauses) {
-  //   const timerange = getSelectionTimeRange($scope.cellData);
-  //   const criteriaFields = []; // [{ fieldName: country_code, fieldValue: 'FR' }]
-  //   const influencerCriteriaFields = [];
-  //   let fieldValues = []; // ['FR']
-  //   let fieldNames = [];
-
-  //   if (queryClauses.length > 0 && queryClauses.length === 1) {
-  //     // it's an influencer field
-  //     if ($scope.viewBySwimlaneOptions.includes(queryClauses[0].field)) {
-  //       influencerCriteriaFields.push({
-  //         fieldName: queryClauses[0].field,
-  //         fieldValue: queryClauses[0].value.text || queryClauses[0].value });
-  //     } else {
-  //       criteriaFields.push({ fieldName: queryClauses[0].field, fieldValue: queryClauses[0].value.text || queryClauses[0].value });
-  //     }
-  //     fieldValues.push(queryClauses[0].value.text || queryClauses[0].value);
-  //     fieldNames.push(queryClauses[0].field);
-
-  //     return {
-  //       type: 'viewBy',
-  //       lanes: [queryClauses[0].value],
-  //       times: [timerange.earliestMs, timerange.latestMs],
-  //       criteriaFields,
-  //       influencerCriteriaFields,
-  //       fieldValues,
-  //       fieldNames
-  //     };
-  //   } else if (queryClauses.length > 0 && queryClauses.length > 1) {
-  //     queryClauses.forEach((clause) => {
-  //       if ($scope.viewBySwimlaneOptions.includes(clause.field)) {
-  //         influencerCriteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
-  //       } else {
-  //         criteriaFields.push({ fieldName: clause.field, fieldValue: clause.value.text || clause.value });
-  //       }
-  //     });
-  //     // search terms with / get interpreted as dates
-  //     fieldValues = queryClauses.map((clause) => clause.value.text || clause.value);
-  //     fieldNames = queryClauses.map((clause) => clause.field);
-  //     // TODO: lanes, type needs to be set correctly
-  //     return {
-  //       type: 'viewBy',
-  //       lanes: fieldValues,
-  //       times: [timerange.earliestMs, timerange.latestMs],
-  //       criteriaFields,
-  //       influencerCriteriaFields,
-  //       fieldValues: _.uniq(fieldValues),
-  //       fieldNames: _.uniq(fieldNames)
-  //     };
-  //   }
-  // }
 
   // create new job objects based on standard job config objects
   // new job objects just contain job id, bucket span in seconds and a selected flag.
@@ -444,14 +391,27 @@ module.controller('MlExplorerController', function (
 
   $scope.setSwimlaneViewBy = function (viewByFieldName) {
     $scope.swimlaneViewByFieldName = viewByFieldName;
+    const filterData = $scope.filterData;
 
     // Save the 'view by' field name to the AppState so that it can restored from the URL.
     $scope.appState.fetch();
     $scope.appState.mlExplorerSwimlane.viewBy = viewByFieldName;
+    if (filterData !== undefined) {
+      $scope.appState.mlExplorerSwimlane.maskAll = (viewByFieldName === VIEW_BY_JOB_LABEL ||
+        filterData.fieldNames.includes(viewByFieldName) === false);
+      $scope.appState.mlExplorerSwimlane.selectedType = filterData.type;
+    }
     $scope.appState.save();
-
-    loadViewBySwimlane([]);
-    clearSelectedAnomalies();
+    // Check if filter active and apply to swimlanes if applicable
+    if ($scope.appState.mlExplorerSwimlane.filterActive === true &&
+        filterData !== undefined && filterData.fieldValues &&
+        $scope.appState.mlExplorerSwimlane.viewBy !== VIEW_BY_JOB_LABEL &&
+        $scope.appState.mlExplorerSwimlane.maskAll === false) {
+      loadViewBySwimlane(filterData.fieldValues);
+    } else {
+      loadViewBySwimlane([]);
+      clearSelectedAnomalies();
+    }
   };
 
   // Refresh all the data when the time range is altered.
