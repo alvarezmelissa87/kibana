@@ -81,29 +81,44 @@ export const Explorer = injectI18n(
       };
     }
 
+    influencerFields = [];
+
     viewByChangeHandler = e => this.props.setSwimlaneViewBy(e.target.value);
 
     onSwimlaneEnterHandler = () => this.props.setSwimlaneSelectActive(true);
     onSwimlaneLeaveHandler = () => this.props.setSwimlaneSelectActive(false);
 
-    // Param looks like {query: Query, queryText: "he", error: null}
     // TODO: Validate query before calling applyFilter to ensure it's complete and fieldName/fieldValue are valid + wrap in try catch
-    // TODO: wrap in SINGLE QUOTES anything with special characters in it - ensure useful error message shows up
-    handleFilterChange = ({ query, error }) => {
+    // TODO: wrap in SINGLE QUOTES anything with special characters in it - ensure useful error message shows up*
+    handleFilterChange = ({ query, error }) => { // add queryText in params to use for syntax validation
+      let errorMessage = null;
+
       if (error) {
         console.log('Error processing filter query', error);
         this.setState({ error });
-        // this.props.applyFilter([]); // Not sure we want to do this as it would clear out last filter
       } else {
         const formattedQuery = EuiSearchBar.Query.toESQuery(query);
         const queryClauses = query.ast.clauses;
 
-        this.setState({
-          error: null,
-          query
+        queryClauses.forEach((clause) => {
+          if (this.influencerFields.includes(clause.field) === false) {
+            errorMessage = `Unknown influencer field ${clause.field}
+              (possible values: ${this.influencerFields.slice(0, 2).join(', ')})`;
+          }
         });
 
-        this.props.applyFilter(queryClauses, formattedQuery);
+        if (errorMessage !== null) {
+          this.setState({
+            error: { message: errorMessage }
+          });
+        } else {
+          this.setState({
+            error: errorMessage,
+            query
+          });
+
+          this.props.applyFilter(queryClauses, formattedQuery);
+        }
       }
     }
 
@@ -132,9 +147,11 @@ export const Explorer = injectI18n(
       const { initialQuery } = this.state;
       const schema = {};
       const filters = [];
+      const urlExample = `url:('/example/url')`; // fields with / need to be wrapped in single quotes
+      let placeholder = `e.g. tag:(marketing or engineering) ${urlExample}`;
 
       if (influencers !== undefined) {
-        Object.keys(influencers).forEach((influencerName) => {
+        Object.keys(influencers).forEach((influencerName, index) => {
           const options = influencers[influencerName].map((influencer) =>
             ({ value: influencer.influencerFieldValue, view: influencer.influencerFieldValue }));
 
@@ -146,17 +163,17 @@ export const Explorer = injectI18n(
             options
           });
 
-          // schema[influencerName] = {
-          //   type: 'string',
-          //   validate: (value) => {
-          //     if(!options.some(option => option.value === value)) {
-          //       throw new Error(`Invalid value ${value} for field ${influencerName}`);
-          //     }
-          //   }
-          // };
-        });
+          if (index === 0) {
+            placeholder = `e.g. ${influencerName}:(${options[0].value} ${options[1] ? 'or ' + options[1].value : ''}) ${urlExample}`;
+          }
 
-        // schema.strict = true;
+          // TODO: Any point to keeping this?
+          schema[influencerName] = {
+            type: 'string'
+          };
+
+          this.influencerFields.push(influencerName);
+        });
       }
 
       return (
@@ -164,7 +181,7 @@ export const Explorer = injectI18n(
           <EuiSearchBar
             defaultQuery={initialQuery}
             box={{
-              placeholder: 'e.g. type:(visualization or search) type:text',
+              placeholder,
               incremental: false,
               schema
             }}

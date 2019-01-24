@@ -260,10 +260,10 @@ module.controller('MlExplorerController', function (
           clause.value.forEach((value) => {
             influencerCriteriaFields.push({
               fieldName: clause.field,
-              fieldValue: value
+              fieldValue: value.raw || value
             });
 
-            fieldValues.push(value);
+            fieldValues.push(value.raw || value);
             lanes.push(value);
           });
         }
@@ -271,7 +271,7 @@ module.controller('MlExplorerController', function (
         clause.value.forEach((value) => {
           criteriaFields.push({
             fieldName: clause.field,
-            fieldValue: value
+            fieldValue: value.raw || value
           });
         });
       }
