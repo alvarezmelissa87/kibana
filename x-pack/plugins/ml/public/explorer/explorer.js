@@ -61,7 +61,7 @@ function mapSwimlaneOptionsToEuiOptions(options) {
 //     return result;
 //   }
 
-//   const acceptedQueryPattern = /(\w+:\(\'?\w+\'?( or \w+)*?\))/ig;
+//   const acceptedQueryPattern = /^([\w.-]+:\(\'?.+\'?( or .+)*?\))/ig;
 //   const slashPattern = /\//g;
 
 //   if (slashPattern.test(queryText) === true) {
