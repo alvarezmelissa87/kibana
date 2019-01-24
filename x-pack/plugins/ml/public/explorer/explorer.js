@@ -51,6 +51,32 @@ function mapSwimlaneOptionsToEuiOptions(options) {
   }));
 }
 
+// We only accept multiselect 'or' queries from EuiSearch bar currently
+// We could support and/true multiselect as well but then the syntax would be inconsistent
+// queryText formats -> field:(value or otherValue) field:(value) -> optional '' around values
+// function querySyntaxValid(queryText) {
+//   const result = { valid: true };
+
+//   if (queryText === '') {
+//     return result;
+//   }
+
+//   const acceptedQueryPattern = /(\w+:\(\'?\w+\'?( or \w+)*?\))/ig;
+//   const slashPattern = /\//g;
+
+//   if (slashPattern.test(queryText) === true) {
+//     result.valid = false;
+//     result.errorMessage = 'Ensure terms containing \/ are wrapped in single quotes. e.g. field:(\'/value/with/slashes\')';
+//   }
+
+//   if (acceptedQueryPattern.test(queryText) === false) {
+//     result.valid = false;
+//     result.errorMessage = 'Invalid query syntax. Accepted format - fieldName:(fieldValue) fieldName:(fieldValue or fieldValueTwo)';
+//   }
+
+//   return result;
+// }
+
 export const Explorer = injectI18n(
   class Explorer extends React.Component {
     static propTypes = {
@@ -89,20 +115,33 @@ export const Explorer = injectI18n(
     onSwimlaneLeaveHandler = () => this.props.setSwimlaneSelectActive(false);
 
     // TODO: Validate query before calling applyFilter to ensure it's complete and fieldName/fieldValue are valid + wrap in try catch
-    // TODO: wrap in SINGLE QUOTES anything with special characters in it - ensure useful error message shows up*
-    handleFilterChange = ({ query, error }) => { // add queryText in params to use for syntax validation
+    // TODO: wrap in SINGLE QUOTES anything with special characters in it - ensure useful error message - so if error AND validation fails
+    // we set the slash message from the validator so the user knows what to change
+    handleFilterChange = ({ query, error }) => {
+      // Pass in queryText for validation check
       let errorMessage = null;
 
       if (error) {
         console.log('Error processing filter query', error);
-        this.setState({ error });
+        this.setState({
+          error: { message: 'Invalid syntax. Accepted format - fieldName:(fieldValue) fieldName:(fieldValue or fieldValueTwo)' }
+        });
       } else {
+        // const syntaxCheck = querySyntaxValid(queryText);
+
+        // if (syntaxCheck.valid === false) {
+        //   this.setState({
+        //     error: { message: syntaxCheck.errorMessage }
+        //   });
+        //   return;
+        // }
+
         const formattedQuery = EuiSearchBar.Query.toESQuery(query);
         const queryClauses = query.ast.clauses;
 
         queryClauses.forEach((clause) => {
           if (this.influencerFields.includes(clause.field) === false) {
-            errorMessage = `Unknown influencer field ${clause.field}
+            errorMessage = `Unknown influencer field ${clause.field ? clause.field : ''}
               (possible values: ${this.influencerFields.slice(0, 2).join(', ')})`;
           }
         });
