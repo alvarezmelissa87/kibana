@@ -245,14 +245,14 @@ export const Explorer = injectI18n(
 
     checkboxShowChartsListener = () => {
       const showCharts = mlCheckboxShowChartsService.state.get('showCharts');
-      const { selectedCells, selectedJobs } = this.state;
+      const { selectedCells, selectedJobs, filterData } = this.state;
 
       const timerange = getSelectionTimeRange(
         selectedCells,
         this.getSwimlaneBucketInterval(selectedJobs).asSeconds()
       );
 
-      if (showCharts && selectedCells !== null) {
+      if (showCharts && (selectedCells !== null || filterData !== null)) {
         this.updateCharts(
           this.state.anomalyChartRecords, timerange.earliestMs, timerange.latestMs
         );
