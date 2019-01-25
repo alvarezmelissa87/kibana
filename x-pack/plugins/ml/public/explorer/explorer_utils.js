@@ -186,16 +186,21 @@ export function getSelectionTimeRange(selectedCells, interval) {
   return { earliestMs, latestMs };
 }
 
-export function getSelectionInfluencers(selectedCells, fieldName) {
+export function getSelectionInfluencers(selectedCells, fieldName, filterData) {
+  const influencers = [];
+
   if (
     selectedCells !== null &&
     selectedCells.viewByFieldName !== undefined &&
     selectedCells.viewByFieldName !== VIEW_BY_JOB_LABEL
   ) {
-    return selectedCells.lanes.map(laneLabel => ({ fieldName, fieldValue: laneLabel }));
+    selectedCells.lanes.forEach(laneLabel => influencers.push({ fieldName, fieldValue: laneLabel }));
+  } else if (filterData !== null) {
+    // If fields to filter by are already influencers push into influencers
+    influencers.push(...filterData.influencerCriteriaFields);
   }
 
-  return [];
+  return influencers;
 }
 
 // Obtain the list of 'View by' fields per job and swimlaneViewByFieldName
@@ -419,10 +424,10 @@ export async function loadAnnotationsTableData(selectedCells, selectedJobs, inte
   );
 }
 
-export async function loadAnomaliesTableData(selectedCells, selectedJobs, dateFormatTz, interval, fieldName) {
+export async function loadAnomaliesTableData(selectedCells, selectedJobs, dateFormatTz, interval, fieldName, filterData) {
   const jobIds = (selectedCells !== null && selectedCells.viewByFieldName === VIEW_BY_JOB_LABEL) ?
     selectedCells.lanes : selectedJobs.map(d => d.id);
-  const influencers = getSelectionInfluencers(selectedCells, fieldName);
+  const influencers = getSelectionInfluencers(selectedCells, fieldName, filterData);
   const timeRange = getSelectionTimeRange(selectedCells, interval);
 
   return new Promise((resolve, reject) => {
@@ -480,7 +485,7 @@ export async function loadAnomaliesTableData(selectedCells, selectedJobs, dateFo
 // track the request to be able to ignore out of date requests
 // and avoid race conditions ending up with the wrong charts.
 let requestCount = 0;
-export async function loadDataForCharts(jobIds, earliestMs, latestMs, influencers = [], selectedCells) {
+export async function loadDataForCharts(jobIds, earliestMs, latestMs, influencers = [], selectedCells, filterData) {
   return new Promise((resolve) => {
     // Just skip doing the request when this function
     // is called without the minimum required data.
@@ -501,7 +506,7 @@ export async function loadDataForCharts(jobIds, earliestMs, latestMs, influencer
           resolve(undefined);
         }
 
-        if (selectedCells !== null && Object.keys(selectedCells).length > 0) {
+        if ((selectedCells !== null && Object.keys(selectedCells).length > 0) || filterData !== null) {
           console.log('Explorer anomaly charts data set:', resp.records);
           resolve(resp.records);
         }

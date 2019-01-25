@@ -30,6 +30,7 @@ import {
   ExplorerNoResultsFound,
 } from './components';
 import { ExplorerSwimlane } from './explorer_swimlane';
+import { ExplorerFilterBar } from './explorer_filter_bar';
 import { formatHumanReadableDateTime } from '../util/date_utils';
 import { getBoundsRoundedToInterval } from 'plugins/ml/util/ml_time_buckets';
 import { InfluencersList } from '../components/influencers_list';
@@ -85,9 +86,12 @@ function getExplorerDefaultState() {
     annotationsData: [],
     anomalyChartRecords: [],
     chartsData: getDefaultChartsData(),
+    filterActive: false,
+    filterData: null,
     hasResults: false,
     influencers: {},
     loading: true,
+    maskAll: false,
     noInfluencersConfigured: true,
     noJobsFound: true,
     overallSwimlaneData: [],
@@ -605,6 +609,7 @@ export const Explorer = injectI18n(
     annotationsTablePreviousData = null;
     async updateExplorer(stateUpdate, showOverallLoadingIndicator = true) {
       const {
+        filterData,
         noInfluencersConfigured,
         noJobsFound,
         selectedCells,
@@ -694,11 +699,17 @@ export const Explorer = injectI18n(
           { viewByLoadedForTimeFormatted: formatHumanReadableDateTime(timerange.earliestMs) }
         );
       } else {
+        let fieldValues = [];
+        if (filterData !== null &&
+            filterData.fieldValues &&
+            filterData.fieldNames.includes(viewBySwimlaneOptions.swimlaneViewByFieldName) === true) {
+          fieldValues = filterData.fieldValues;
+        }
         Object.assign(
           stateUpdate,
           viewBySwimlaneOptions,
           await this.loadViewBySwimlane(
-            [],
+            fieldValues,
             overallSwimlaneData,
             selectedJobs,
             viewBySwimlaneOptions.swimlaneViewByFieldName
@@ -730,7 +741,7 @@ export const Explorer = injectI18n(
         Object.assign(stateUpdate, getClearedSelectedAnomaliesState());
       }
 
-      const selectionInfluencers = getSelectionInfluencers(selectedCells, viewBySwimlaneOptions.swimlaneViewByFieldName);
+      const selectionInfluencers = getSelectionInfluencers(selectedCells, viewBySwimlaneOptions.swimlaneViewByFieldName, filterData);
 
       if (selectionInfluencers.length === 0) {
         stateUpdate.influencers = await loadTopInfluencers(jobIds, timerange.earliestMs, timerange.latestMs, noInfluencersConfigured);
@@ -755,7 +766,7 @@ export const Explorer = injectI18n(
 
       this.setState(stateUpdate);
 
-      if (mlCheckboxShowChartsService.state.get('showCharts') && selectedCells !== null) {
+      if (mlCheckboxShowChartsService.state.get('showCharts') && (selectedCells !== null || filterData !== null)) {
         this.updateCharts(
           stateUpdate.anomalyChartRecords, timerange.earliestMs, timerange.latestMs
         );
@@ -771,6 +782,7 @@ export const Explorer = injectI18n(
         dateFormatTz,
         interval: this.getSwimlaneBucketInterval(selectedJobs).asSeconds(),
         swimlaneViewByFieldName: viewBySwimlaneOptions.swimlaneViewByFieldName,
+        filterData
       };
 
       if (_.isEqual(anomaliesTableCompareArgs, this.anomaliesTablePreviousArgs)) {
@@ -782,7 +794,8 @@ export const Explorer = injectI18n(
           selectedJobs,
           dateFormatTz,
           this.getSwimlaneBucketInterval(selectedJobs).asSeconds(),
-          viewBySwimlaneOptions.swimlaneViewByFieldName
+          viewBySwimlaneOptions.swimlaneViewByFieldName,
+          filterData
         );
         this.setState({ tableData });
       }
@@ -790,9 +803,16 @@ export const Explorer = injectI18n(
 
     viewByChangeHandler = e => this.setSwimlaneViewBy(e.target.value);
     setSwimlaneViewBy = (swimlaneViewByFieldName) => {
+      let maskAll = false;
+
+      if (this.state.filterData !== null) {
+        maskAll = (swimlaneViewByFieldName === VIEW_BY_JOB_LABEL ||
+        this.state.filterData.fieldNames.includes(swimlaneViewByFieldName) === false);
+      }
+
       this.props.appStateHandler(APP_STATE_ACTION.CLEAR_SELECTION);
       this.props.appStateHandler(APP_STATE_ACTION.SAVE_SWIMLANE_VIEW_BY_FIELD_NAME, { swimlaneViewByFieldName });
-      this.setState({ swimlaneViewByFieldName }, () => {
+      this.setState({ swimlaneViewByFieldName, maskAll }, () => {
         this.updateExplorer({
           swimlaneViewByFieldName,
           ...getClearedSelectedAnomaliesState(),
@@ -854,6 +874,72 @@ export const Explorer = injectI18n(
       }
     }
 
+    // If query is empty object we clear any existing selection,
+    // otherwise we save the new selection in AppState and update the Explorer.
+    applyFilter = (queryClauses) => {
+      const { swimlaneViewByFieldName } = this.state;
+      // TODO: double check
+      if (queryClauses.length === 0) {
+        const stateUpdate = { ...{
+          filterActive: false,
+          filterData: null,
+          maskAll: false
+        },
+        ...getClearedSelectedAnomaliesState()
+        };
+
+        this.updateExplorer(stateUpdate, false);
+      } else {
+        const filterData = this.getFilterData(queryClauses);
+        const maskAll = (swimlaneViewByFieldName === VIEW_BY_JOB_LABEL ||
+          filterData.fieldNames.includes(swimlaneViewByFieldName) === false);
+
+        this.updateExplorer({
+          filterActive: true,
+          filterData,
+          maskAll }, false);
+      }
+    };
+
+    getFilterData = (queryClauses) => {
+      const criteriaFields = [];
+      const fieldValues = []; // ['FR']
+      const fieldNames = [];
+      const influencerCriteriaFields = []; // [{ fieldName: country_code, fieldValue: 'FR' }]
+
+      queryClauses.forEach((clause) => {
+        // Each clause obj has a field property that is a string.
+        // Each clause obj has a value property that is either string/object or an array of strings/objects
+        fieldNames.push(clause.field);
+
+        if (Array.isArray(clause.value)) {
+          clause.value.forEach((value) => {
+            influencerCriteriaFields.push({
+              fieldName: clause.field,
+              fieldValue: value.raw || value
+            });
+
+            fieldValues.push(value.raw || value);
+          });
+        } else {
+          influencerCriteriaFields.push({
+            fieldName: clause.field,
+            fieldValue: clause.value.raw || clause.value
+          });
+
+          fieldValues.push(clause.value.raw || clause.value);
+        }
+      });
+
+      return {
+        type: 'viewBy',
+        criteriaFields,
+        influencerCriteriaFields,
+        fieldValues,
+        fieldNames
+      };
+    }
+
     render() {
       const {
         intl,
@@ -864,8 +950,10 @@ export const Explorer = injectI18n(
         annotationsData,
         anomalyChartRecords,
         chartsData,
+        filterActive,
         influencers,
         hasResults,
+        maskAll,
         noInfluencersConfigured,
         noJobsFound,
         overallSwimlaneData,
@@ -912,6 +1000,13 @@ export const Explorer = injectI18n(
 
       return (
         <div className="results-container">
+          {noInfluencersConfigured === false &&
+            influencers !== undefined &&
+            <ExplorerFilterBar
+              influencers={influencers}
+              applyFilter={this.applyFilter}
+            />}
+
           {noInfluencersConfigured && (
             <div className="no-influencers-warning">
               <EuiIconTip
@@ -953,6 +1048,8 @@ export const Explorer = injectI18n(
             >
               <ExplorerSwimlane
                 chartWidth={swimlaneWidth}
+                filterActive={filterActive}
+                maskAll={maskAll}
                 MlTimeBuckets={MlTimeBuckets}
                 swimlaneCellClick={this.swimlaneCellClick}
                 swimlaneData={overallSwimlaneData}
@@ -1024,6 +1121,8 @@ export const Explorer = injectI18n(
                       swimlaneData={viewBySwimlaneData}
                       swimlaneType={SWIMLANE_TYPE.VIEW_BY}
                       selection={selectedCells}
+                      filterActive={filterActive}
+                      maskAll={maskAll}
                       swimlaneRenderDoneListener={this.swimlaneRenderDoneListener}
                     />
                   </div>
