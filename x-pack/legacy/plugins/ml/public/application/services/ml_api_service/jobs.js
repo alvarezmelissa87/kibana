@@ -126,10 +126,15 @@ export const jobs = {
     });
   },
 
-  newJobCaps(indexPatternTitle, isRollup = false) {
+  newJobCaps(indexPatternTitle, isRollup = false, allowObjects = false) {
     const isRollupString = isRollup === true ? `?rollup=true` : '';
+    let allowObjectsString = '';
+    if (allowObjects === true) {
+      allowObjectsString = `${isRollup === true ? '&' : '?'}allow_objects=true`;
+    }
+
     return http({
-      url: `${basePath}/jobs/new_job_caps/${indexPatternTitle}${isRollupString}`,
+      url: `${basePath}/jobs/new_job_caps/${indexPatternTitle}${isRollupString}${allowObjectsString}`,
       method: 'GET',
     });
   },

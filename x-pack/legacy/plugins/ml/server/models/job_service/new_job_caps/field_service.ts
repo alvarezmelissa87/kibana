@@ -40,9 +40,10 @@ export function fieldServiceProvider(
   indexPattern: string,
   isRollup: boolean,
   callWithRequest: any,
-  request: Request
+  request: Request,
+  allowObjects?: boolean
 ) {
-  return new FieldsService(indexPattern, isRollup, callWithRequest, request);
+  return new FieldsService(indexPattern, isRollup, callWithRequest, request, allowObjects);
 }
 
 class FieldsService {
@@ -50,12 +51,20 @@ class FieldsService {
   private _isRollup: boolean;
   private _callWithRequest: any;
   private _request: Request;
+  private _allowObjects?: boolean;
 
-  constructor(indexPattern: string, isRollup: boolean, callWithRequest: any, request: Request) {
+  constructor(
+    indexPattern: string,
+    isRollup: boolean,
+    callWithRequest: any,
+    request: Request,
+    allowObjects?: boolean
+  ) {
     this._indexPattern = indexPattern;
     this._isRollup = isRollup;
     this._callWithRequest = callWithRequest;
     this._request = request;
+    this._allowObjects = allowObjects;
   }
 
   private async loadFieldCaps(): Promise<any> {
@@ -76,7 +85,10 @@ class FieldsService {
         if (firstKey !== undefined) {
           const field = fc[firstKey];
           // add to the list of fields if the field type can be used by ML
-          if (supportedTypes.includes(field.type) === true) {
+          if (
+            supportedTypes.includes(field.type) === true ||
+            (this._allowObjects && field.type === ES_FIELD_TYPES.OBJECT)
+          ) {
             fields.push({
               id: k,
               name: k,

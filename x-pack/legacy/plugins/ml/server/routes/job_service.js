@@ -170,8 +170,9 @@ export function jobServiceRoutes({ commonRouteConfig, elasticsearchPlugin, route
       const callWithRequest = callWithRequestFactory(elasticsearchPlugin, request);
       const { indexPattern } = request.params;
       const isRollup = request.query.rollup === 'true';
+      const allowObjects = request.query.allow_objects === 'true';
       const { newJobCaps } = jobServiceProvider(callWithRequest, request);
-      return newJobCaps(indexPattern, isRollup).catch(resp => wrapError(resp));
+      return newJobCaps(indexPattern, isRollup, allowObjects).catch(resp => wrapError(resp));
     },
     config: {
       ...commonRouteConfig,

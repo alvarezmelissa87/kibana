@@ -109,7 +109,7 @@ export const ClassificationExploration: FC<Props> = ({ jobId, jobStatus }) => {
         const indexPatternId = getIndexPatternIdFromName(sourceIndex) || sourceIndex;
         const indexPattern: IIndexPattern = await kibanaContext.indexPatterns.get(indexPatternId);
         if (indexPattern !== undefined) {
-          await newJobCapsService.initializeFromIndexPattern(indexPattern, false, false);
+          await newJobCapsService.initializeFromIndexPattern(indexPattern, false, false, true);
         }
         setIsInitialized(true);
       } catch (e) {

@@ -15,9 +15,16 @@ interface NewJobCapsResponse {
 export function newJobCapsProvider(callWithRequest: any, request: Request) {
   async function newJobCaps(
     indexPattern: string,
-    isRollup: boolean = false
+    isRollup: boolean = false,
+    allowObjects: boolean = false
   ): Promise<NewJobCapsResponse> {
-    const fieldService = fieldServiceProvider(indexPattern, isRollup, callWithRequest, request);
+    const fieldService = fieldServiceProvider(
+      indexPattern,
+      isRollup,
+      callWithRequest,
+      request,
+      allowObjects
+    );
     const { aggs, fields } = await fieldService.getData();
     convertForStringify(aggs, fields);
 

@@ -148,7 +148,11 @@ declare interface Ml {
     closeJobs(jobIds: string[]): Promise<object>;
     jobAuditMessages(jobId: string, from?: string): Promise<JobMessage[]>;
     deletingJobTasks(): Promise<object>;
-    newJobCaps(indexPatternTitle: string, isRollup: boolean): Promise<object>;
+    newJobCaps(
+      indexPatternTitle: string,
+      isRollup: boolean,
+      allowObjects: boolean
+    ): Promise<object>;
     newJobLineChart(
       indexPatternTitle: string,
       timeField: string,

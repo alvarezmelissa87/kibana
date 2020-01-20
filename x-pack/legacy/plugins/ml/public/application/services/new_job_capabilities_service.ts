@@ -91,13 +91,18 @@ class NewJobCapsService {
   public async initializeFromIndexPattern(
     indexPattern: IIndexPattern,
     includeEventRateField = true,
-    removeTextFields = true
+    removeTextFields = true,
+    allowObjects = false
   ) {
     try {
       this._includeEventRateField = includeEventRateField;
       this._removeTextFields = removeTextFields;
 
-      const resp = await ml.jobs.newJobCaps(indexPattern.title, indexPattern.type === 'rollup');
+      const resp = await ml.jobs.newJobCaps(
+        indexPattern.title,
+        indexPattern.type === 'rollup',
+        allowObjects
+      );
       const { fields: allFields, aggs } = createObjects(resp, indexPattern.title);
 
       if (this._includeEventRateField === true) {
