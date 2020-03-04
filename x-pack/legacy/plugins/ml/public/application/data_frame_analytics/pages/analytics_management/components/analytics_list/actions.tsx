@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { i18n } from '@kbn/i18n';
-import { EuiButtonEmpty, EuiToolTip } from '@elastic/eui';
+import { EuiButtonEmpty, EuiButtonIcon, EuiToolTip } from '@elastic/eui';
 
 import {
   checkPermission,
@@ -20,7 +20,12 @@ import {
   isClassificationAnalysis,
 } from '../../../../common/analytics';
 
-import { getResultsUrl, isDataFrameAnalyticsRunning, DataFrameAnalyticsListRow } from './common';
+import {
+  getResultsUrl,
+  getJobMapUrl,
+  isDataFrameAnalyticsRunning,
+  DataFrameAnalyticsListRow,
+} from './common';
 import { stopAnalytics } from '../../services/analytics_service';
 
 import { StartAction } from './action_start';
@@ -57,10 +62,35 @@ export const AnalyticsViewAction = {
   },
 };
 
+export const JobMapAction = {
+  isPrimary: true,
+  render: (item: DataFrameAnalyticsListRow) => {
+    const analysisType = getAnalysisType(item.config.analysis);
+    const isDisabled =
+      !isRegressionAnalysis(item.config.analysis) &&
+      !isOutlierAnalysis(item.config.analysis) &&
+      !isClassificationAnalysis(item.config.analysis);
+
+    const url = getJobMapUrl(item.id, analysisType);
+    return (
+      <EuiButtonIcon
+        disabled={isDisabled}
+        color={'text'}
+        onClick={() => (window.location.href = url)}
+        iconType="branch"
+        aria-label={i18n.translate('xpack.ml.dataframe.analyticsList.jobMapAriaLabel', {
+          defaultMessage: 'Job Map',
+        })}
+      />
+    );
+  },
+};
+
 export const getActions = () => {
   const canStartStopDataFrameAnalytics: boolean = checkPermission('canStartStopDataFrameAnalytics');
 
   return [
+    JobMapAction, // TODO: need to add some conditional based on feature flag or something
     AnalyticsViewAction,
     {
       render: (item: DataFrameAnalyticsListRow) => {
