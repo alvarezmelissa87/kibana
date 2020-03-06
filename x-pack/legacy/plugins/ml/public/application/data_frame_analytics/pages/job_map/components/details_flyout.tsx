@@ -33,16 +33,16 @@ import {
 interface Props {
   children: any;
   closeFlyout: any;
-  jobId: string;
+  analyticsId: string;
 }
 
-export const DetailsFlyout: FC<Props> = ({ children, closeFlyout, jobId }) => {
+export const DetailsFlyout: FC<Props> = ({ children, closeFlyout, analyticsId }) => {
   return (
     <EuiFlyout size="s" onClose={closeFlyout} data-test-subj="mlAnalyticsJobMapFlyout">
       <EuiFlyoutHeader>
         <EuiTitle>
           <h2 data-test-subj="mlDataFrameAnalyticsNodeDetailsTitle">
-            {i18n.translate('xpack.ml.dataframe.analytics.jobMap.flyoutHeaderTitle', {
+            {i18n.translate('xpack.ml.dataframe.analytics.analyticsMap.flyoutHeaderTitle', {
               defaultMessage: 'Node details',
             })}
           </h2>

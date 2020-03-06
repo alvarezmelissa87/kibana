@@ -31,10 +31,10 @@ import { CytoscapeContext } from './cytoscape';
 import { DetailsFlyout } from './details_flyout';
 
 interface Props {
-  jobId: string;
+  analyticsId: string;
 }
 
-export const Controls: FC<Props> = ({ jobId }) => {
+export const Controls: FC<Props> = ({ analyticsId }) => {
   const [showFlyout, setShowFlyout] = useState<boolean>(false);
   const [selectedNode, setSelectedNode] = useState<cytoscape.NodeSingular | undefined>(undefined);
 
@@ -77,7 +77,7 @@ export const Controls: FC<Props> = ({ jobId }) => {
 
   return (
     <>
-      <DetailsFlyout jobId={jobId} closeFlyout={() => setShowFlyout(false)}>
+      <DetailsFlyout analyticsId={analyticsId} closeFlyout={() => setShowFlyout(false)}>
         <EuiText>{nodeId}</EuiText>
         <EuiText>More details</EuiText>
       </DetailsFlyout>

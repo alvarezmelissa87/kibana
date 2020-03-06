@@ -4,66 +4,78 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-import React, { FC } from 'react';
+import React, { FC, useEffect, useState } from 'react';
 // import { FormattedMessage } from '@kbn/i18n/react';
-// import { i18n } from '@kbn/i18n';
-// import { EuiBetaBadge } from '@elastic/eui';
+import { i18n } from '@kbn/i18n';
+import { EuiPanel, EuiSpacer, EuiCallOut, EuiTitle } from '@elastic/eui';
 import { Cytoscape, Controls } from './components';
+import { ml } from '../../../services/ml_api_service';
 
-const elements = [
-  {
-    data: {
-      id: 'opbeans-python',
-      label: 'opbeans-python',
-      agentName: 'python',
-      type: 'service',
-    },
-  },
-  {
-    data: {
-      id: 'opbeans-node',
-      label: 'opbeans-node',
-      agentName: 'nodejs',
-      type: 'service',
-    },
-  },
-  {
-    data: {
-      id: 'new-thing',
-      label: 'new-thing',
-      agentName: 'nodejs',
-      type: 'service',
-    },
-  },
-  {
-    data: {
-      id: 'opbeans-ruby',
-      label: 'opbeans-ruby',
-      agentName: 'ruby',
-      type: 'service',
-    },
-  },
-  { data: { source: 'opbeans-python', target: 'opbeans-node' } },
-  { data: { source: 'opbeans-node', target: 'new-thing' } },
-  {
-    data: {
-      bidirectional: true,
-      source: 'opbeans-python',
-      target: 'opbeans-ruby',
-    },
-  },
-];
+export const JobMapTitle: React.FC<{ analyticsId: string }> = ({ analyticsId }) => (
+  <EuiTitle size="xs">
+    <span>
+      {i18n.translate('xpack.ml.dataframe.analytics.map.analyticsIdTitle', {
+        defaultMessage: 'Map for analytics ID {analyticsId}',
+        values: { analyticsId },
+      })}
+    </span>
+  </EuiTitle>
+);
 
 interface Props {
-  jobId: string;
+  analyticsId: string;
   jobStatus: any;
 }
+// TODO: use a proper loading screen like LoadingOverlay in APM
+export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
+  const [elements, setElements] = useState([]);
+  const [nodeDetails, setNodeDetails] = useState({});
+  const [error, setError] = useState(undefined);
 
-export const JobMap: FC<Props> = ({ jobId, jobStatus }) => {
+  const getData = async () => {
+    const analyticsMap = await ml.dataFrameAnalytics.getDataFrameAnalyticsMap(analyticsId);
+    const { elements: nodeElements, details, error: fetchError } = analyticsMap;
+
+    if (fetchError !== null) {
+      setError(fetchError);
+    }
+
+    // create node connections
+    if (nodeElements && nodeElements.length > 0) {
+      setElements(nodeElements);
+      setNodeDetails(details);
+    }
+  };
+
+  useEffect(() => {
+    getData();
+  }, [analyticsId]);
+
+  if (error !== undefined && elements.length === 0) {
+    return (
+      <EuiPanel grow={false}>
+        <JobMapTitle analyticsId={analyticsId} />
+        <EuiSpacer />
+        <EuiCallOut title="Unable to fetch some data" color="danger" iconType="cross">
+          <p>{error}</p>
+        </EuiCallOut>
+      </EuiPanel>
+    );
+  }
+
   return (
     <div>
+      {error !== undefined && (
+        <EuiPanel grow={false}>
+          <JobMapTitle analyticsId={analyticsId} />
+          <EuiSpacer />
+          <EuiCallOut title="Unable to fetch some data" color="danger" iconType="cross">
+            <p>{error}</p>
+          </EuiCallOut>
+        </EuiPanel>
+      )}
       <Cytoscape height={500} elements={elements}>
-        <Controls jobId={jobId} />
+        <Controls analyticsId={analyticsId} />
       </Cytoscape>
     </div>
   );

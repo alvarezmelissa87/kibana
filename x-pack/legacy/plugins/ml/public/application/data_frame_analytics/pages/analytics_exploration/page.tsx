@@ -70,7 +70,7 @@ export const Page: FC<{
           </EuiPageContentHeader>
           <EuiPageContentBody>
             <EuiSpacer size="l" />
-            <JobMap jobId={jobId} jobStatus={jobStatus} />
+            <JobMap analyticsId={jobId} jobStatus={jobStatus} />
             {/* {!isMap && analysisType === ANALYSIS_CONFIG_TYPE.OUTLIER_DETECTION && (
               <Exploration jobId={jobId} jobStatus={jobStatus} />
             )}

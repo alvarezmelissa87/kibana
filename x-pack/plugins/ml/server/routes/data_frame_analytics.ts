@@ -5,14 +5,21 @@
  */
 
 import { schema } from '@kbn/config-schema';
+import { RequestHandlerContext } from 'src/core/server';
 import { wrapError } from '../client/error_wrapper';
 import { analyticsAuditMessagesProvider } from '../models/data_frame_analytics/analytics_audit_messages';
+import { AnalyticsManager } from '../models/data_frame_analytics/analytics_manager';
 import { RouteInitialization } from '../types';
 import {
   dataAnalyticsJobConfigSchema,
   dataAnalyticsEvaluateSchema,
   dataAnalyticsExplainSchema,
 } from './schemas/data_analytics_schema';
+
+function getAnalyticsMap(context: RequestHandlerContext, analyticsId: string) {
+  const analytics = new AnalyticsManager(context.ml!.mlClient.callAsCurrentUser);
+  return analytics.getAnalyticsMap(analyticsId);
+}
 
 /**
  * Routes for the data frame analytics
@@ -69,6 +76,36 @@ export function dataFrameAnalyticsRoutes({ router, mlLicense }: RouteInitializat
         const results = await context.ml!.mlClient.callAsCurrentUser('ml.getDataFrameAnalytics', {
           analyticsId,
         });
+        return response.ok({
+          body: results,
+        });
+      } catch (e) {
+        return response.customError(wrapError(e));
+      }
+    })
+  );
+
+  /**
+   * @apiGroup DataFrameAnalytics
+   *
+   * @api {get} /api/ml/data_frame/analytics/map/:analyticsId Get objects leading up to analytics job
+   * @apiName GetDataFrameAnalyticsIdMap
+   * @apiDescription Returns map of objects leading up to analytics job.
+   *
+   * @apiParam {String} analyticsId Analytics ID.
+   */
+  router.get(
+    {
+      path: '/api/ml/data_frame/analytics/map/{analyticsId}',
+      validate: {
+        params: schema.object({ analyticsId: schema.string() }),
+      },
+    },
+    mlLicense.fullLicenseAPIGuard(async (context, request, response) => {
+      try {
+        const { analyticsId } = request.params;
+
+        const results = await getAnalyticsMap(context, analyticsId);
         return response.ok({
           body: results,
         });

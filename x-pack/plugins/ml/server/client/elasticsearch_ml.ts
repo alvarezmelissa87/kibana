@@ -103,6 +103,20 @@ export const elasticsearchJsPlugin = (Client: any, config: any, components: any)
     method: 'POST',
   });
 
+  ml.getDataFrameAnalyticsMap = ca({
+    urls: [
+      {
+        fmt: '/_ml/data_frame/analytics/map/<%=analyticsId%>',
+        req: {
+          analyticsId: {
+            type: 'string',
+          },
+        },
+      },
+    ],
+    method: 'GET',
+  });
+
   // Currently the endpoint uses a default size of 100 unless a size is supplied.
   // So until paging is supported in the UI, explicitly supply a size of 1000
   // to match the max number of docs that the endpoint can return.

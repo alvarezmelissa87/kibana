@@ -5,3 +5,4 @@
  */
 
 export { analyticsAuditMessagesProvider } from './analytics_audit_messages';
+export { AnalyticsManager } from './analytics_manager';
