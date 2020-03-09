@@ -5,7 +5,6 @@
  */
 
 import React, { FC, useEffect, useState } from 'react';
-// import { FormattedMessage } from '@kbn/i18n/react';
 import { i18n } from '@kbn/i18n';
 import { EuiTitle } from '@elastic/eui';
 import { Cytoscape, Controls } from './components';
@@ -27,7 +26,7 @@ interface Props {
   analyticsId: string;
   jobStatus: any;
 }
-// TODO: use a proper loading screen like LoadingOverlay in APM
+
 export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
   const toastNotifications = getToastNotifications();
   const [elements, setElements] = useState([]);
@@ -63,8 +62,9 @@ export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
 
   return (
     <div>
-      <Cytoscape height={500} elements={elements}>
-        <Controls analyticsId={analyticsId} details={nodeDetails} />
+      <JobMapTitle analyticsId={analyticsId} />
+      <Cytoscape height={800} elements={elements}>
+        <Controls details={nodeDetails} />
       </Cytoscape>
     </div>
   );

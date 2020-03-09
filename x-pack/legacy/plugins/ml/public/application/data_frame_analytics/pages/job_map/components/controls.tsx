@@ -6,18 +6,16 @@
 
 import React, { FC, useEffect, useState, useContext, useCallback } from 'react';
 import cytoscape from 'cytoscape';
-// import { FormattedMessage } from '@kbn/i18n/react';
 import { i18n } from '@kbn/i18n';
 import { EuiCodeEditor, EuiText } from '@elastic/eui';
 import { CytoscapeContext } from './cytoscape';
 import { DetailsFlyout } from './details_flyout';
 
 interface Props {
-  analyticsId: string;
   details: any;
 }
 
-export const Controls: FC<Props> = ({ analyticsId, details }) => {
+export const Controls: FC<Props> = ({ details }) => {
   const [showFlyout, setShowFlyout] = useState<boolean>(false);
   const [selectedNode, setSelectedNode] = useState<cytoscape.NodeSingular | undefined>(undefined);
 
@@ -31,6 +29,7 @@ export const Controls: FC<Props> = ({ analyticsId, details }) => {
   }, [cy, setSelectedNode]);
 
   const nodeId = selectedNode?.data('id');
+  const nodeLabel = selectedNode?.data('label');
 
   // Set up Cytoscape event handlers
   useEffect(() => {
@@ -63,8 +62,8 @@ export const Controls: FC<Props> = ({ analyticsId, details }) => {
 
   return (
     <>
-      <DetailsFlyout analyticsId={analyticsId} closeFlyout={() => setShowFlyout(false)}>
-        <EuiText>{nodeId}</EuiText>
+      <DetailsFlyout closeFlyout={() => setShowFlyout(false)}>
+        <EuiText>{nodeLabel}</EuiText>
         <EuiCodeEditor
           mode="json"
           width="100%"

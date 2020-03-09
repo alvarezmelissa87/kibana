@@ -14,22 +14,7 @@ import React, {
   useCallback,
 } from 'react';
 import cytoscape from 'cytoscape';
-// import { cytoscapeOptions, nodeHeight, animationOptions } from './cytoscapeOptions';
-
-const cytoscapeOptions: cytoscape.CytoscapeOptions = {
-  autoungrabify: true,
-  boxSelectionEnabled: false,
-  maxZoom: 3,
-  minZoom: 0.2,
-  style: [
-    {
-      selector: 'node',
-      style: {
-        label: 'data(id)',
-      },
-    },
-  ],
-};
+import { cytoscapeOptions } from './cytoscape_options';
 
 export const CytoscapeContext = createContext<cytoscape.Core | undefined>(undefined);
 
@@ -64,6 +49,9 @@ function useCytoscape(options: cytoscape.CytoscapeOptions) {
 
 const layoutOptions = {
   name: 'breadthfirst',
+  directed: true,
+  fit: true,
+  spacingFactor: 0.85,
 };
 
 export function Cytoscape({ children, elements, height, style }: CytoscapeProps) {
@@ -104,13 +92,9 @@ export function Cytoscape({ children, elements, height, style }: CytoscapeProps)
       event.target.removeClass('hover');
       event.target.connectedEdges().removeClass('nodeHover');
     };
-    // function clickHandler(event: any) {
-    //   console.log('---- EVENT ---', event.target.data('id'));
-    // }
 
     if (cy) {
       cy.on('data', dataHandler);
-      // cy.on('click', 'edge, node', clickHandler);
       cy.on('mouseover', 'edge, node', mouseoverHandler);
       cy.on('mouseout', 'edge, node', mouseoutHandler);
     }
@@ -118,7 +102,6 @@ export function Cytoscape({ children, elements, height, style }: CytoscapeProps)
     return () => {
       if (cy) {
         cy.removeListener('data', undefined, dataHandler as cytoscape.EventHandler);
-        // cy.removeListener('click', 'edge, node', clickHandler);
         cy.removeListener('mouseover', 'edge, node', mouseoverHandler);
         cy.removeListener('mouseout', 'edge, node', mouseoutHandler);
       }

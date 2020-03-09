@@ -10,19 +10,15 @@
  */
 
 import React, { FC } from 'react';
-// import cytoscape from 'cytoscape';
-// import { FormattedMessage } from '@kbn/i18n/react';
 import { i18n } from '@kbn/i18n';
 import { EuiTitle, EuiFlyout, EuiFlyoutHeader, EuiFlyoutBody } from '@elastic/eui';
-// import { CytoscapeContext } from './cytoscape';
 
 interface Props {
   children: any;
   closeFlyout: any;
-  analyticsId: string;
 }
 
-export const DetailsFlyout: FC<Props> = ({ children, closeFlyout, analyticsId }) => {
+export const DetailsFlyout: FC<Props> = ({ children, closeFlyout }) => {
   return (
     <EuiFlyout size="m" onClose={closeFlyout} data-test-subj="mlAnalyticsJobMapFlyout">
       <EuiFlyoutHeader>

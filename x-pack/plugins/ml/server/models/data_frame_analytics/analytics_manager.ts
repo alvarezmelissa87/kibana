@@ -4,7 +4,6 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-// import { difference } from 'lodash';
 import Boom from 'boom';
 import { IScopedClusterClient } from 'src/core/server';
 
@@ -145,7 +144,11 @@ export class AnalyticsManager {
         const currentElem = result.elements[i];
         const nextElem = result.elements[i + 1];
         result.elements.push({
-          data: { source: currentElem.data.id, target: nextElem.data.id },
+          data: {
+            id: `${currentElem.data.id}~${nextElem.data.id}`,
+            source: currentElem.data.id,
+            target: nextElem.data.id,
+          },
         });
       }
 
@@ -165,9 +168,11 @@ export class AnalyticsManager {
               data: { id: nodeId, label: jobs[i].id, type: analyticsType },
             });
             result.details[nodeId] = jobs[i];
+            const source = `${comparator}-${rootTransform ? 'transform' : 'index-pattern'}`;
             result.elements.push({
               data: {
-                source: `${comparator}-${rootTransform ? 'transform' : 'index-pattern'}`,
+                id: `${source}~${nodeId}`,
+                source,
                 target: nodeId,
               },
             });
