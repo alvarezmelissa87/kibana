@@ -4,12 +4,6 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Elastic License;
- * you may not use this file except in compliance with the Elastic License.
- */
-
 // import { difference } from 'lodash';
 import Boom from 'boom';
 import { IScopedClusterClient } from 'src/core/server';
@@ -95,10 +89,13 @@ export class AnalyticsManager {
       let rootTransform;
       let rootIndexPattern;
 
+      const analyticsType = 'analytics';
+      const firstNodeId = `${data.id}-${analyticsType}`;
+
       result.elements.push({
-        data: { id: data.id, label: data.id, type: 'analytics' },
+        data: { id: firstNodeId, label: data.id, type: analyticsType },
       });
-      result.details[data.id] = data;
+      result.details[firstNodeId] = data;
       // Add a safeguard against infinite loops.
       while (complete === false) {
         count++;
@@ -114,13 +111,12 @@ export class AnalyticsManager {
           result.elements.unshift({
             data: { id: nodeId, label: sourceIndex, type: indexPatternType },
           });
-          result.details[nodeId] = data;
+          result.details[nodeId] = link.indexData;
           rootIndexPattern = sourceIndex;
           complete = true;
         } else if (link.isJob === true) {
           data = link.jobData;
 
-          const analyticsType = 'analytics';
           const nodeId = `${data.id}-${analyticsType}`;
 
           result.elements.unshift({
@@ -160,19 +156,19 @@ export class AnalyticsManager {
         const comparator = rootTransform !== undefined ? rootTransform : rootIndexPattern;
 
         for (let i = 0; i < jobs.length; i++) {
-          // match source and destination in case id same as index id
           if (
             jobs[i]?.source?.index[0] === comparator &&
             this.isDuplicateElement(jobs[i].id, result.elements) === false
           ) {
+            const nodeId = `${jobs[i].id}-${analyticsType}`;
             result.elements.push({
-              data: { id: jobs[i].id, label: jobs[i].id, type: 'analytics' },
+              data: { id: nodeId, label: jobs[i].id, type: analyticsType },
             });
-            result.details[jobs[i].id] = data;
+            result.details[nodeId] = jobs[i];
             result.elements.push({
               data: {
                 source: `${comparator}-${rootTransform ? 'transform' : 'index-pattern'}`,
-                target: jobs[i].id,
+                target: nodeId,
               },
             });
           }

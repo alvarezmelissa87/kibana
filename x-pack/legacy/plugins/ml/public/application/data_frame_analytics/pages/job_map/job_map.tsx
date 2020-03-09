@@ -7,9 +7,10 @@
 import React, { FC, useEffect, useState } from 'react';
 // import { FormattedMessage } from '@kbn/i18n/react';
 import { i18n } from '@kbn/i18n';
-import { EuiPanel, EuiSpacer, EuiCallOut, EuiTitle } from '@elastic/eui';
+import { EuiTitle } from '@elastic/eui';
 import { Cytoscape, Controls } from './components';
 import { ml } from '../../../services/ml_api_service';
+import { getToastNotifications } from '../../../util/dependency_cache';
 
 export const JobMapTitle: React.FC<{ analyticsId: string }> = ({ analyticsId }) => (
   <EuiTitle size="xs">
@@ -28,6 +29,7 @@ interface Props {
 }
 // TODO: use a proper loading screen like LoadingOverlay in APM
 export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
+  const toastNotifications = getToastNotifications();
   const [elements, setElements] = useState([]);
   const [nodeDetails, setNodeDetails] = useState({});
   const [error, setError] = useState(undefined);
@@ -40,7 +42,6 @@ export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
       setError(fetchError);
     }
 
-    // create node connections
     if (nodeElements && nodeElements.length > 0) {
       setElements(nodeElements);
       setNodeDetails(details);
@@ -51,31 +52,19 @@ export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
     getData();
   }, [analyticsId]);
 
-  if (error !== undefined && elements.length === 0) {
-    return (
-      <EuiPanel grow={false}>
-        <JobMapTitle analyticsId={analyticsId} />
-        <EuiSpacer />
-        <EuiCallOut title="Unable to fetch some data" color="danger" iconType="cross">
-          <p>{error}</p>
-        </EuiCallOut>
-      </EuiPanel>
+  if (error !== undefined) {
+    toastNotifications.addDanger(
+      i18n.translate('xpack.ml.dataframe.analyticsMap.fetchDataErrorMessage', {
+        defaultMessage: 'Unable to fetch some data. An error occurred: {error}',
+        values: { error: JSON.stringify(error) },
+      })
     );
   }
 
   return (
     <div>
-      {error !== undefined && (
-        <EuiPanel grow={false}>
-          <JobMapTitle analyticsId={analyticsId} />
-          <EuiSpacer />
-          <EuiCallOut title="Unable to fetch some data" color="danger" iconType="cross">
-            <p>{error}</p>
-          </EuiCallOut>
-        </EuiPanel>
-      )}
       <Cytoscape height={500} elements={elements}>
-        <Controls analyticsId={analyticsId} />
+        <Controls analyticsId={analyticsId} details={nodeDetails} />
       </Cytoscape>
     </div>
   );

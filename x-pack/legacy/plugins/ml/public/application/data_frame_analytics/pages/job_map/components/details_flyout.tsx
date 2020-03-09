@@ -13,21 +13,7 @@ import React, { FC } from 'react';
 // import cytoscape from 'cytoscape';
 // import { FormattedMessage } from '@kbn/i18n/react';
 import { i18n } from '@kbn/i18n';
-import {
-  // EuiBetaBadge,
-  // EuiPage,
-  // EuiPageBody,
-  EuiTitle,
-  // EuiPageHeader,
-  // EuiPageHeaderSection,
-  EuiFlyout,
-  EuiFlyoutHeader,
-  EuiFlyoutBody,
-  // EuiFlyoutFooter,
-  // EuiButton,
-  // EuiText,
-  // EuiTitle,
-} from '@elastic/eui';
+import { EuiTitle, EuiFlyout, EuiFlyoutHeader, EuiFlyoutBody } from '@elastic/eui';
 // import { CytoscapeContext } from './cytoscape';
 
 interface Props {
@@ -38,7 +24,7 @@ interface Props {
 
 export const DetailsFlyout: FC<Props> = ({ children, closeFlyout, analyticsId }) => {
   return (
-    <EuiFlyout size="s" onClose={closeFlyout} data-test-subj="mlAnalyticsJobMapFlyout">
+    <EuiFlyout size="m" onClose={closeFlyout} data-test-subj="mlAnalyticsJobMapFlyout">
       <EuiFlyoutHeader>
         <EuiTitle>
           <h2 data-test-subj="mlDataFrameAnalyticsNodeDetailsTitle">

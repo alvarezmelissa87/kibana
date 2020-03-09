@@ -3,38 +3,21 @@
  * or more contributor license agreements. Licensed under the Elastic License;
  * you may not use this file except in compliance with the Elastic License.
  */
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Elastic License;
- * you may not use this file except in compliance with the Elastic License.
- */
 
 import React, { FC, useEffect, useState, useContext, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 // import { FormattedMessage } from '@kbn/i18n/react';
-// import { i18n } from '@kbn/i18n';
-import {
-  // EuiBetaBadge,
-  // EuiPage,
-  // EuiPageBody,
-  // EuiTitle,
-  // EuiPageHeader,
-  // EuiPageHeaderSection,
-  // EuiFlyout,
-  // EuiFlyoutHeader,
-  // EuiFlyoutBody,
-  // EuiButton,
-  EuiText,
-  // EuiTitle,
-} from '@elastic/eui';
+import { i18n } from '@kbn/i18n';
+import { EuiCodeEditor, EuiText } from '@elastic/eui';
 import { CytoscapeContext } from './cytoscape';
 import { DetailsFlyout } from './details_flyout';
 
 interface Props {
   analyticsId: string;
+  details: any;
 }
 
-export const Controls: FC<Props> = ({ analyticsId }) => {
+export const Controls: FC<Props> = ({ analyticsId, details }) => {
   const [showFlyout, setShowFlyout] = useState<boolean>(false);
   const [selectedNode, setSelectedNode] = useState<cytoscape.NodeSingular | undefined>(undefined);
 
@@ -75,11 +58,29 @@ export const Controls: FC<Props> = ({ analyticsId }) => {
     return null;
   }
 
+  // @ts-ignore
+  const content = JSON.stringify(details[nodeId], null, 2);
+
   return (
     <>
       <DetailsFlyout analyticsId={analyticsId} closeFlyout={() => setShowFlyout(false)}>
         <EuiText>{nodeId}</EuiText>
-        <EuiText>More details</EuiText>
+        <EuiCodeEditor
+          mode="json"
+          width="100%"
+          value={content}
+          setOptions={{
+            fontSize: '12px',
+          }}
+          theme="textmate"
+          isReadOnly
+          aria-label={i18n.translate(
+            'xpack.ml.dataframe.analytics.jobMap.flyout.codeEditorAriaLabel',
+            {
+              defaultMessage: 'Advanced analytics job editor',
+            }
+          )}
+        />
       </DetailsFlyout>
     </>
   );
