@@ -32,8 +32,16 @@ export const Controls: FC<Props> = ({ details }) => {
   const nodeLabel = selectedNode?.data('label');
 
   // Set up Cytoscape event handlers
+  // const nodes = cytoscape({ elements }).nodes();
+  // const unconnectedNodes = nodes.roots().intersection(nodes.leaves());
   useEffect(() => {
     const selectHandler: cytoscape.EventHandler = event => {
+      // if (cy) {
+      //   // cy.nodes().roots()[0].data('id')
+      //   // if it's not the current analyticsID and it's type is 'analytics' we can try and fetch other jobs
+      //   TODO: access node data from event.target/selectedNode to create link to job and if ^^ do a fetch for more elements
+      //   then that will add to 'elements' which will trigger the 'data' and cause an add in Cytoscape component
+      // }
       setSelectedNode(event.target);
       setShowFlyout(true);
     };

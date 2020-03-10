@@ -23,6 +23,7 @@ interface CytoscapeProps {
   elements: cytoscape.ElementDefinition[];
   height: number;
   style?: CSSProperties;
+  width: number;
 }
 
 function useCytoscape(options: cytoscape.CytoscapeOptions) {
@@ -47,14 +48,16 @@ function useCytoscape(options: cytoscape.CytoscapeOptions) {
   return [ref, cy] as [React.MutableRefObject<any>, cytoscape.Core | undefined];
 }
 
-const layoutOptions = {
-  name: 'breadthfirst',
-  directed: true,
-  fit: true,
-  spacingFactor: 0.85,
-};
+function getLayoutOptions(width: number, height: number) {
+  return {
+    name: 'breadthfirst',
+    directed: true,
+    fit: true,
+    // spacingFactor: 0.85,
+  };
+}
 
-export function Cytoscape({ children, elements, height, style }: CytoscapeProps) {
+export function Cytoscape({ children, elements, height, style, width }: CytoscapeProps) {
   const [ref, cy] = useCytoscape({
     ...cytoscapeOptions,
     elements,
@@ -67,7 +70,7 @@ export function Cytoscape({ children, elements, height, style }: CytoscapeProps)
   const dataHandler = useCallback<cytoscape.EventHandler>(
     event => {
       if (cy) {
-        const layout = cy.layout(layoutOptions);
+        const layout = cy.layout(getLayoutOptions(width, height));
         layout.run();
       }
     },

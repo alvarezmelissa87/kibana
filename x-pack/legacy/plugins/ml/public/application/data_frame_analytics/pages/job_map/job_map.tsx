@@ -5,11 +5,34 @@
  */
 
 import React, { FC, useEffect, useState } from 'react';
+import theme from '@elastic/eui/dist/eui_theme_light.json';
 import { i18n } from '@kbn/i18n';
 import { EuiTitle } from '@elastic/eui';
 import { Cytoscape, Controls } from './components';
 import { ml } from '../../../services/ml_api_service';
 import { getToastNotifications } from '../../../util/dependency_cache';
+import { useRefDimensions } from './components/use_ref_dimensions';
+
+const cytoscapeDivStyle = {
+  background: `linear-gradient(
+  90deg,
+  ${theme.euiPageBackgroundColor}
+    calc(${theme.euiSizeL} - calc(${theme.euiSizeXS} / 2)),
+  transparent 1%
+)
+center,
+linear-gradient(
+  ${theme.euiPageBackgroundColor}
+    calc(${theme.euiSizeL} - calc(${theme.euiSizeXS} / 2)),
+  transparent 1%
+)
+center,
+${theme.euiColorLightShade}`,
+  backgroundSize: `${theme.euiSizeL} ${theme.euiSizeL}`,
+  margin: `-${theme.gutterTypes.gutterLarge}`,
+  marginTop: 0,
+  // paddingTop: `${theme.gutterTypes.gutterLarge}`,
+};
 
 export const JobMapTitle: React.FC<{ analyticsId: string }> = ({ analyticsId }) => (
   <EuiTitle size="xs">
@@ -58,12 +81,15 @@ export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
         values: { error: JSON.stringify(error) },
       })
     );
+    setError(undefined);
   }
 
+  const { ref: wrapperRef, width, height } = useRefDimensions();
+
   return (
-    <div>
+    <div style={{ height: height - parseInt(theme.gutterTypes.gutterLarge, 10) }} ref={wrapperRef}>
       <JobMapTitle analyticsId={analyticsId} />
-      <Cytoscape height={800} elements={elements}>
+      <Cytoscape height={height} elements={elements} width={width} style={cytoscapeDivStyle}>
         <Controls details={nodeDetails} />
       </Cytoscape>
     </div>

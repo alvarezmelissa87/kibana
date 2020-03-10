@@ -71,7 +71,6 @@ export class AnalyticsManager {
   /**
    * Works backward from jobId to return related jobs from source indices
    * @param jobId
-   * @returns {Promise<*>}
    */
   async getAnalyticsMap(analyticsId: string) {
     const result: any = { elements: [], details: {}, error: null };
@@ -102,7 +101,12 @@ export class AnalyticsManager {
           break;
         }
 
-        link = await this.getNextLink(sourceIndex);
+        try {
+          link = await this.getNextLink(sourceIndex);
+        } catch (error) {
+          result.error = error.message || 'Something went wrong';
+          break;
+        }
 
         if (link.isIndexPattern === true) {
           const indexPatternType = 'index-pattern';
