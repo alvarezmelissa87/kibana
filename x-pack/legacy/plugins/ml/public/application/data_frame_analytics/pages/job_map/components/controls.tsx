@@ -7,15 +7,18 @@
 import React, { FC, useEffect, useState, useContext, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 import { i18n } from '@kbn/i18n';
-import { EuiCodeEditor, EuiText } from '@elastic/eui';
+import { EuiButton, EuiCodeEditor, EuiText } from '@elastic/eui';
 import { CytoscapeContext } from './cytoscape';
 import { DetailsFlyout } from './details_flyout';
+import { JOB_MAP_NODE_TYPES } from '../common';
 
 interface Props {
+  analyticsId: string;
   details: any;
+  getNodeData: any;
 }
 
-export const Controls: FC<Props> = ({ details }) => {
+export const Controls: FC<Props> = ({ analyticsId, details, getNodeData }) => {
   const [showFlyout, setShowFlyout] = useState<boolean>(false);
   const [selectedNode, setSelectedNode] = useState<cytoscape.NodeSingular | undefined>(undefined);
 
@@ -30,18 +33,11 @@ export const Controls: FC<Props> = ({ details }) => {
 
   const nodeId = selectedNode?.data('id');
   const nodeLabel = selectedNode?.data('label');
+  const nodeType = selectedNode?.data('type');
 
   // Set up Cytoscape event handlers
-  // const nodes = cytoscape({ elements }).nodes();
-  // const unconnectedNodes = nodes.roots().intersection(nodes.leaves());
   useEffect(() => {
     const selectHandler: cytoscape.EventHandler = event => {
-      // if (cy) {
-      //   // cy.nodes().roots()[0].data('id')
-      //   // if it's not the current analyticsID and it's type is 'analytics' we can try and fetch other jobs
-      //   TODO: access node data from event.target/selectedNode to create link to job and if ^^ do a fetch for more elements
-      //   then that will add to 'elements' which will trigger the 'data' and cause an add in Cytoscape component
-      // }
       setSelectedNode(event.target);
       setShowFlyout(true);
     };
@@ -68,10 +64,26 @@ export const Controls: FC<Props> = ({ details }) => {
   // @ts-ignore
   const content = JSON.stringify(details[nodeId], null, 2);
 
+  const nodeDataButtonHandler = () => {
+    getNodeData(nodeLabel);
+    setShowFlyout(false);
+  };
+
+  const nodeDataButton =
+    analyticsId !== nodeLabel && nodeType === JOB_MAP_NODE_TYPES.ANALYTICS ? (
+      <EuiButton onClick={nodeDataButtonHandler} iconType="branch">
+        {i18n.translate('xpack.ml.dataframe.analytics.jobMap.flyout.fetchRelatedNodesButton', {
+          defaultMessage: 'Fetch related nodes',
+        })}
+      </EuiButton>
+    ) : null;
+
   return (
     <>
       <DetailsFlyout closeFlyout={() => setShowFlyout(false)}>
         <EuiText>{nodeLabel}</EuiText>
+        <EuiText>{nodeType}</EuiText>
+        {nodeDataButton}
         <EuiCodeEditor
           mode="json"
           width="100%"

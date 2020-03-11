@@ -8,6 +8,7 @@ import React, { FC, useEffect, useState } from 'react';
 import theme from '@elastic/eui/dist/eui_theme_light.json';
 import { i18n } from '@kbn/i18n';
 import { EuiTitle } from '@elastic/eui';
+import cytoscape from 'cytoscape';
 import { Cytoscape, Controls } from './components';
 import { ml } from '../../../services/ml_api_service';
 import { getToastNotifications } from '../../../util/dependency_cache';
@@ -31,7 +32,6 @@ ${theme.euiColorLightShade}`,
   backgroundSize: `${theme.euiSizeL} ${theme.euiSizeL}`,
   margin: `-${theme.gutterTypes.gutterLarge}`,
   marginTop: 0,
-  // paddingTop: `${theme.gutterTypes.gutterLarge}`,
 };
 
 export const JobMapTitle: React.FC<{ analyticsId: string }> = ({ analyticsId }) => (
@@ -52,21 +52,42 @@ interface Props {
 
 export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
   const toastNotifications = getToastNotifications();
-  const [elements, setElements] = useState([]);
+  const [elements, setElements] = useState<cytoscape.ElementDefinition[]>([]);
   const [nodeDetails, setNodeDetails] = useState({});
   const [error, setError] = useState(undefined);
 
-  const getData = async () => {
-    const analyticsMap = await ml.dataFrameAnalytics.getDataFrameAnalyticsMap(analyticsId);
+  const getData = async (id?: string) => {
+    const treatAsRoot = id !== undefined;
+    const idToUse = treatAsRoot ? id : analyticsId;
+    // Pass in treatAsRoot flag - endpoint will take job destIndex to grab jobs created from it
+    // TODO: update analyticsMap return type here
+    const analyticsMap: any = await ml.dataFrameAnalytics.getDataFrameAnalyticsMap(
+      idToUse,
+      treatAsRoot
+    );
     const { elements: nodeElements, details, error: fetchError } = analyticsMap;
 
     if (fetchError !== null) {
       setError(fetchError);
     }
 
+    if (nodeElements && nodeElements.length === 0) {
+      toastNotifications.add(
+        i18n.translate('xpack.ml.dataframe.analyticsMap.emptyResponseMessage', {
+          defaultMessage: 'No related analytics jobs found for {id}.',
+          values: { id: idToUse },
+        })
+      );
+    }
+
     if (nodeElements && nodeElements.length > 0) {
-      setElements(nodeElements);
-      setNodeDetails(details);
+      if (id === undefined) {
+        setElements(nodeElements);
+        setNodeDetails(details);
+      } else {
+        setElements([...elements, ...nodeElements]);
+        setNodeDetails({ ...details, ...nodeDetails });
+      }
     }
   };
 
@@ -90,7 +111,7 @@ export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
     <div style={{ height: height - parseInt(theme.gutterTypes.gutterLarge, 10) }} ref={wrapperRef}>
       <JobMapTitle analyticsId={analyticsId} />
       <Cytoscape height={height} elements={elements} width={width} style={cytoscapeDivStyle}>
-        <Controls details={nodeDetails} />
+        <Controls details={nodeDetails} getNodeData={getData} analyticsId={analyticsId} />
       </Cytoscape>
     </div>
   );

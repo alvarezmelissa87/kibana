@@ -8,17 +8,18 @@ import cytoscape from 'cytoscape';
 import React from 'react';
 import theme from '@elastic/eui/dist/eui_theme_light.json';
 import { EuiIcon } from '@elastic/eui';
+import { JOB_MAP_NODE_TYPES } from '../common';
 
 const lineColor = '#C5CCD7';
 
 function shapeForNode(el: cytoscape.NodeSingular) {
   const type = el.data('type');
   switch (type) {
-    case 'analytics':
+    case JOB_MAP_NODE_TYPES.ANALYTICS:
       return 'ellipse';
-    case 'transform':
+    case JOB_MAP_NODE_TYPES.TRANSFORM:
       return 'rectangle';
-    case 'index-pattern':
+    case JOB_MAP_NODE_TYPES.INDEX_PATTERN:
       return 'diamond';
     default:
       return 'ellipse';
@@ -28,11 +29,11 @@ function shapeForNode(el: cytoscape.NodeSingular) {
 function iconForNode(el: cytoscape.NodeSingular) {
   const type = el.data('type');
   switch (type) {
-    case 'analytics':
+    case JOB_MAP_NODE_TYPES.ANALYTICS:
       return <EuiIcon type={'machineLearningApp'} size="s" />;
-    case 'transform':
+    case JOB_MAP_NODE_TYPES.TRANSFORM:
       return <EuiIcon type={'indexManagementApp'} size="s" />;
-    case 'index-pattern':
+    case JOB_MAP_NODE_TYPES.INDEX_PATTERN:
       return <EuiIcon type={'indexPatternApp'} size="s" />;
     default:
       return 'ellipse';

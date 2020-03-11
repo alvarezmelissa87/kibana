@@ -21,6 +21,11 @@ function getAnalyticsMap(context: RequestHandlerContext, analyticsId: string) {
   return analytics.getAnalyticsMap(analyticsId);
 }
 
+function getExtendedMap(context: RequestHandlerContext, analyticsId: string) {
+  const analytics = new AnalyticsManager(context.ml!.mlClient.callAsCurrentUser);
+  return analytics.extendAnalyticsMapForAnalyticsJob(analyticsId);
+}
+
 /**
  * Routes for the data frame analytics
  */
@@ -98,14 +103,22 @@ export function dataFrameAnalyticsRoutes({ router, mlLicense }: RouteInitializat
     {
       path: '/api/ml/data_frame/analytics/map/{analyticsId}',
       validate: {
-        params: schema.object({ analyticsId: schema.string() }),
+        params: schema.object({
+          analyticsId: schema.string(),
+        }),
+        query: schema.maybe(schema.object({ treatAsRoot: schema.maybe(schema.any()) })),
       },
     },
     mlLicense.fullLicenseAPIGuard(async (context, request, response) => {
       try {
         const { analyticsId } = request.params;
+        // @ts-ignore
+        const treatAsRoot = request.query?.treatAsRoot;
+        const caller =
+          treatAsRoot === 'true' || treatAsRoot === true ? getExtendedMap : getAnalyticsMap;
 
-        const results = await getAnalyticsMap(context, analyticsId);
+        const results = await caller(context, analyticsId);
+
         return response.ok({
           body: results,
         });

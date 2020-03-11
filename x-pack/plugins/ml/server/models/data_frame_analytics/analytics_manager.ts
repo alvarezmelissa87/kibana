@@ -6,6 +6,7 @@
 
 import Boom from 'boom';
 import { IScopedClusterClient } from 'src/core/server';
+import { JOB_MAP_NODE_TYPES } from '../../../../../legacy/plugins/ml/public/application/data_frame_analytics/pages/job_map/common';
 
 export class AnalyticsManager {
   private _client: IScopedClusterClient['callAsCurrentUser'];
@@ -17,7 +18,7 @@ export class AnalyticsManager {
   private isDuplicateElement(analyticsId: string, elements: any[]) {
     let isDuplicate = false;
     elements.forEach((elem: any) => {
-      if (elem.data.label === analyticsId && elem.data.type === 'analytics') {
+      if (elem.data.label === analyticsId && elem.data.type === JOB_MAP_NODE_TYPES.ANALYTICS) {
         isDuplicate = true;
       }
     });
@@ -51,7 +52,7 @@ export class AnalyticsManager {
           const jobData = resp?.data_frame_analytics[0];
 
           return { jobData, isJob: true };
-        } else if (meta.created_by === 'transform') {
+        } else if (meta.created_by === JOB_MAP_NODE_TYPES.TRANSFORM) {
           // fetch transform so we can get original index pattern
           const transformId = meta._transform?.transform;
           const transform = await this._client('transport.request', {
@@ -87,11 +88,10 @@ export class AnalyticsManager {
       let rootTransform;
       let rootIndexPattern;
 
-      const analyticsType = 'analytics';
-      const firstNodeId = `${data.id}-${analyticsType}`;
+      const firstNodeId = `${data.id}-${JOB_MAP_NODE_TYPES.ANALYTICS}`;
 
       result.elements.push({
-        data: { id: firstNodeId, label: data.id, type: analyticsType },
+        data: { id: firstNodeId, label: data.id, type: JOB_MAP_NODE_TYPES.ANALYTICS },
       });
       result.details[firstNodeId] = data;
       // Add a safeguard against infinite loops.
@@ -109,10 +109,9 @@ export class AnalyticsManager {
         }
 
         if (link.isIndexPattern === true) {
-          const indexPatternType = 'index-pattern';
-          const nodeId = `${sourceIndex}-${indexPatternType}`;
+          const nodeId = `${sourceIndex}-${JOB_MAP_NODE_TYPES.INDEX_PATTERN}`;
           result.elements.unshift({
-            data: { id: nodeId, label: sourceIndex, type: indexPatternType },
+            data: { id: nodeId, label: sourceIndex, type: JOB_MAP_NODE_TYPES.INDEX_PATTERN },
           });
           result.details[nodeId] = link.indexData;
           rootIndexPattern = sourceIndex;
@@ -120,22 +119,21 @@ export class AnalyticsManager {
         } else if (link.isJob === true) {
           data = link.jobData;
 
-          const nodeId = `${data.id}-${analyticsType}`;
+          const nodeId = `${data.id}-${JOB_MAP_NODE_TYPES.ANALYTICS}`;
 
           result.elements.unshift({
-            data: { id: nodeId, label: data.id, type: analyticsType },
+            data: { id: nodeId, label: data.id, type: JOB_MAP_NODE_TYPES.ANALYTICS },
           });
           result.details[nodeId] = data;
           sourceIndex = data?.source?.index[0];
         } else if (link.isTransform === true) {
           data = link.transformData;
 
-          const transformType = 'transform';
-          const nodeId = `${data.id}-${transformType}`;
+          const nodeId = `${data.id}-${JOB_MAP_NODE_TYPES.TRANSFORM}`;
           rootTransform = data.id;
 
           result.elements.unshift({
-            data: { id: nodeId, label: data.id, type: transformType },
+            data: { id: nodeId, label: data.id, type: JOB_MAP_NODE_TYPES.TRANSFORM },
           });
           result.details[nodeId] = data;
           sourceIndex = data?.source?.index[0];
@@ -158,8 +156,8 @@ export class AnalyticsManager {
 
       // fetch all jobs associated with root transform if defined, otherwise check root index
       if (rootTransform !== undefined || rootIndexPattern !== undefined) {
-        const transformJobs = await this._client('ml.getDataFrameAnalytics');
-        const jobs = transformJobs?.data_frame_analytics || [];
+        const analyticsJobs = await this._client('ml.getDataFrameAnalytics');
+        const jobs = analyticsJobs?.data_frame_analytics || [];
         const comparator = rootTransform !== undefined ? rootTransform : rootIndexPattern;
 
         for (let i = 0; i < jobs.length; i++) {
@@ -167,12 +165,14 @@ export class AnalyticsManager {
             jobs[i]?.source?.index[0] === comparator &&
             this.isDuplicateElement(jobs[i].id, result.elements) === false
           ) {
-            const nodeId = `${jobs[i].id}-${analyticsType}`;
+            const nodeId = `${jobs[i].id}-${JOB_MAP_NODE_TYPES.ANALYTICS}`;
             result.elements.push({
-              data: { id: nodeId, label: jobs[i].id, type: analyticsType },
+              data: { id: nodeId, label: jobs[i].id, type: JOB_MAP_NODE_TYPES.ANALYTICS },
             });
             result.details[nodeId] = jobs[i];
-            const source = `${comparator}-${rootTransform ? 'transform' : 'index-pattern'}`;
+            const source = `${comparator}-${
+              rootTransform ? JOB_MAP_NODE_TYPES.TRANSFORM : JOB_MAP_NODE_TYPES.INDEX_PATTERN
+            }`;
             result.elements.push({
               data: {
                 id: `${source}~${nodeId}`,
@@ -189,5 +189,48 @@ export class AnalyticsManager {
       result.error = error.message || 'Something went wrong';
       return result;
     }
+  }
+
+  async extendAnalyticsMapForAnalyticsJob(analyticsId: string) {
+    const result: any = { elements: [], details: {}, error: null };
+
+    try {
+      const resp = await this._client('ml.getDataFrameAnalytics', {
+        analyticsId,
+      });
+      const data = resp?.data_frame_analytics[0];
+      const destIndex = Array.isArray(data?.dest?.index) ? data?.dest?.index[0] : data?.dest?.index;
+
+      const analyticsJobs = await this._client('ml.getDataFrameAnalytics');
+      const jobs = analyticsJobs?.data_frame_analytics || [];
+
+      for (let i = 0; i < jobs.length; i++) {
+        if (
+          jobs[i]?.source?.index[0] === destIndex &&
+          this.isDuplicateElement(jobs[i].id, result.elements) === false
+        ) {
+          const nodeId = `${jobs[i].id}-${JOB_MAP_NODE_TYPES.ANALYTICS}`;
+
+          result.elements.push({
+            data: { id: nodeId, label: jobs[i].id, type: JOB_MAP_NODE_TYPES.ANALYTICS },
+          });
+          result.details[nodeId] = jobs[i];
+          const source = `${analyticsId}-${JOB_MAP_NODE_TYPES.ANALYTICS}`;
+
+          result.elements.push({
+            data: {
+              id: `${source}~${nodeId}`,
+              source,
+              target: nodeId,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      result.error = error.message || 'Something went wrong';
+      return result;
+    }
+
+    return result;
   }
 }

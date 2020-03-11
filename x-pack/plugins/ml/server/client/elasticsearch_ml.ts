@@ -106,10 +106,13 @@ export const elasticsearchJsPlugin = (Client: any, config: any, components: any)
   ml.getDataFrameAnalyticsMap = ca({
     urls: [
       {
-        fmt: '/_ml/data_frame/analytics/map/<%=analyticsId%>',
+        fmt: '/_ml/data_frame/analytics/map/<%=analyticsId%>?&treatAsRoot=<%=treatAsRoot%>',
         req: {
           analyticsId: {
             type: 'string',
+          },
+          treatAsRoot: {
+            type: 'boolean',
           },
         },
       },
