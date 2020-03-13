@@ -7,10 +7,19 @@
 import React, { FC, useEffect, useState, useContext, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 import { i18n } from '@kbn/i18n';
-import { EuiButton, EuiCodeEditor, EuiText } from '@elastic/eui';
+import {
+  EuiButtonEmpty,
+  EuiCodeEditor,
+  EuiFlexGroup,
+  EuiFlexItem,
+  EuiFlyout,
+  EuiFlyoutHeader,
+  EuiFlyoutBody,
+  EuiTitle,
+} from '@elastic/eui';
 import { CytoscapeContext } from './cytoscape';
-import { DetailsFlyout } from './details_flyout';
 import { JOB_MAP_NODE_TYPES } from '../common';
+import { DeleteButton } from './delete_button';
 
 interface Props {
   analyticsId: string;
@@ -64,26 +73,50 @@ export const Controls: FC<Props> = ({ analyticsId, details, getNodeData }) => {
   // @ts-ignore
   const content = JSON.stringify(details[nodeId], null, 2);
 
-  const nodeDataButtonHandler = () => {
-    getNodeData(nodeLabel);
-    setShowFlyout(false);
-  };
-
   const nodeDataButton =
     analyticsId !== nodeLabel && nodeType === JOB_MAP_NODE_TYPES.ANALYTICS ? (
-      <EuiButton onClick={nodeDataButtonHandler} iconType="branch">
-        {i18n.translate('xpack.ml.dataframe.analytics.jobMap.flyout.fetchRelatedNodesButton', {
+      <EuiButtonEmpty
+        onClick={() => {
+          getNodeData(nodeLabel);
+          setShowFlyout(false);
+        }}
+        iconType="branch"
+      >
+        {i18n.translate('xpack.ml.dataframe.analyticsMap.flyout.fetchRelatedNodesButton', {
           defaultMessage: 'Fetch related nodes',
         })}
-      </EuiButton>
+      </EuiButtonEmpty>
     ) : null;
 
   return (
-    <>
-      <DetailsFlyout closeFlyout={() => setShowFlyout(false)}>
-        <EuiText>{nodeLabel}</EuiText>
-        <EuiText>{nodeType}</EuiText>
-        {nodeDataButton}
+    <EuiFlyout
+      size="m"
+      onClose={() => setShowFlyout(false)}
+      data-test-subj="mlAnalyticsJobMapFlyout"
+    >
+      <EuiFlyoutHeader>
+        <EuiFlexGroup direction="column" gutterSize="xs">
+          <EuiFlexItem grow={false}>
+            <EuiTitle size="s">
+              <h3 data-test-subj="mlDataFrameAnalyticsNodeDetailsTitle">
+                {i18n.translate('xpack.ml.dataframe.analyticsMap.flyoutHeaderTitle', {
+                  defaultMessage: 'Details for {type} {id}',
+                  values: { id: nodeLabel, type: nodeType },
+                })}
+              </h3>
+            </EuiTitle>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiFlexGroup justifyContent="spaceBetween" alignItems="center">
+              <EuiFlexItem grow={false}>{nodeDataButton}</EuiFlexItem>
+              <EuiFlexItem grow={false}>
+                <DeleteButton id={nodeLabel} type={nodeType} />
+              </EuiFlexItem>
+            </EuiFlexGroup>
+          </EuiFlexItem>
+        </EuiFlexGroup>
+      </EuiFlyoutHeader>
+      <EuiFlyoutBody>
         <EuiCodeEditor
           mode="json"
           width="100%"
@@ -93,14 +126,11 @@ export const Controls: FC<Props> = ({ analyticsId, details, getNodeData }) => {
           }}
           theme="textmate"
           isReadOnly
-          aria-label={i18n.translate(
-            'xpack.ml.dataframe.analytics.jobMap.flyout.codeEditorAriaLabel',
-            {
-              defaultMessage: 'Advanced analytics job editor',
-            }
-          )}
+          aria-label={i18n.translate('xpack.ml.dataframe.analyticsMap.flyout.codeEditorAriaLabel', {
+            defaultMessage: 'Analytics job map details',
+          })}
         />
-      </DetailsFlyout>
-    </>
+      </EuiFlyoutBody>
+    </EuiFlyout>
   );
 };

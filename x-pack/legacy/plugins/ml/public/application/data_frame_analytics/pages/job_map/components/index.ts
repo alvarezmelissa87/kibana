@@ -5,5 +5,5 @@
  */
 
 export { Cytoscape, CytoscapeContext } from './cytoscape';
-export { DetailsFlyout } from './details_flyout';
 export { Controls } from './controls';
+export { JobMapLegend } from './legend';

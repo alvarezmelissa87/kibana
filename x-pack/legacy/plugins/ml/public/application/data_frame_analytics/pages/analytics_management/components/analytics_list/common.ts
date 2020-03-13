@@ -119,7 +119,7 @@ export function isCompletedAnalyticsJob(stats: DataFrameAnalyticsStats) {
 export function getResultsUrl(jobId: string, analysisType: string, status: DATA_FRAME_TASK_STATE) {
   return `ml#/data_frame_analytics/exploration?_g=(ml:(jobId:${jobId},analysisType:${analysisType},jobStatus:${status}))`;
 }
-// TODO: update to /job_map
+
 export function getJobMapUrl(jobId: string, analysisType: string) {
   return `ml#/data_frame_analytics/exploration?_g=(ml:(jobId:${jobId},analysisType:${analysisType},isMap:true))`;
 }

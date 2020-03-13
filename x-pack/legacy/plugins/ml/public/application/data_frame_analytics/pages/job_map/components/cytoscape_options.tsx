@@ -5,38 +5,42 @@
  */
 
 import cytoscape from 'cytoscape';
-import React from 'react';
 import theme from '@elastic/eui/dist/eui_theme_light.json';
-import { EuiIcon } from '@elastic/eui';
 import { JOB_MAP_NODE_TYPES } from '../common';
 
 const lineColor = '#C5CCD7';
 
-function shapeForNode(el: cytoscape.NodeSingular) {
+enum MAP_SHAPES {
+  ELLIPSE = 'ellipse',
+  RECTANGLE = 'rectangle',
+  DIAMOND = 'diamond',
+}
+
+function shapeForNode(el: cytoscape.NodeSingular): MAP_SHAPES {
   const type = el.data('type');
   switch (type) {
     case JOB_MAP_NODE_TYPES.ANALYTICS:
-      return 'ellipse';
+      return MAP_SHAPES.ELLIPSE;
     case JOB_MAP_NODE_TYPES.TRANSFORM:
-      return 'rectangle';
+      return MAP_SHAPES.RECTANGLE;
     case JOB_MAP_NODE_TYPES.INDEX_PATTERN:
-      return 'diamond';
+      return MAP_SHAPES.DIAMOND;
     default:
-      return 'ellipse';
+      return MAP_SHAPES.ELLIPSE;
   }
 }
 
-function iconForNode(el: cytoscape.NodeSingular) {
+function colorForNode(el: cytoscape.NodeSingular) {
   const type = el.data('type');
   switch (type) {
     case JOB_MAP_NODE_TYPES.ANALYTICS:
-      return <EuiIcon type={'machineLearningApp'} size="s" />;
+      return theme.euiColorVis0;
     case JOB_MAP_NODE_TYPES.TRANSFORM:
-      return <EuiIcon type={'indexManagementApp'} size="s" />;
+      return theme.euiColorVis1;
     case JOB_MAP_NODE_TYPES.INDEX_PATTERN:
-      return <EuiIcon type={'indexPatternApp'} size="s" />;
+      return theme.euiColorVis2;
     default:
-      return 'ellipse';
+      return 'white';
   }
 }
 
@@ -50,8 +54,7 @@ export const cytoscapeOptions: cytoscape.CytoscapeOptions = {
     {
       selector: 'node',
       style: {
-        'background-color': 'white',
-        'background-image': (el: cytoscape.NodeSingular) => iconForNode(el),
+        'background-color': (el: cytoscape.NodeSingular) => colorForNode(el),
         'background-height': '60%',
         'background-width': '60%',
         'border-color': (el: cytoscape.NodeSingular) =>

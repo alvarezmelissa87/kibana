@@ -53,7 +53,8 @@ function getLayoutOptions(width: number, height: number) {
     name: 'breadthfirst',
     directed: true,
     fit: true,
-    // spacingFactor: 0.85,
+    spacingFactor: 0.85,
+    boundingBox: { x1: 0, y1: 0, w: width, h: height },
   };
 }
 

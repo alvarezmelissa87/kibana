@@ -7,9 +7,9 @@
 import React, { FC, useEffect, useState } from 'react';
 import theme from '@elastic/eui/dist/eui_theme_light.json';
 import { i18n } from '@kbn/i18n';
-import { EuiTitle } from '@elastic/eui';
+import { EuiFlexGroup, EuiFlexItem, EuiTitle } from '@elastic/eui';
 import cytoscape from 'cytoscape';
-import { Cytoscape, Controls } from './components';
+import { Cytoscape, Controls, JobMapLegend } from './components';
 import { ml } from '../../../services/ml_api_service';
 import { getToastNotifications } from '../../../util/dependency_cache';
 import { useRefDimensions } from './components/use_ref_dimensions';
@@ -37,7 +37,7 @@ ${theme.euiColorLightShade}`,
 export const JobMapTitle: React.FC<{ analyticsId: string }> = ({ analyticsId }) => (
   <EuiTitle size="xs">
     <span>
-      {i18n.translate('xpack.ml.dataframe.analytics.map.analyticsIdTitle', {
+      {i18n.translate('xpack.ml.dataframe.analyticsMap.analyticsIdTitle', {
         defaultMessage: 'Map for analytics ID {analyticsId}',
         values: { analyticsId },
       })}
@@ -109,7 +109,14 @@ export const JobMap: FC<Props> = ({ analyticsId, jobStatus }) => {
 
   return (
     <div style={{ height: height - parseInt(theme.gutterTypes.gutterLarge, 10) }} ref={wrapperRef}>
-      <JobMapTitle analyticsId={analyticsId} />
+      <EuiFlexGroup justifyContent="spaceBetween">
+        <EuiFlexItem grow={false}>
+          <JobMapTitle analyticsId={analyticsId} />
+        </EuiFlexItem>
+        <EuiFlexItem grow={false}>
+          <JobMapLegend />
+        </EuiFlexItem>
+      </EuiFlexGroup>
       <Cytoscape height={height} elements={elements} width={width} style={cytoscapeDivStyle}>
         <Controls details={nodeDetails} getNodeData={getData} analyticsId={analyticsId} />
       </Cytoscape>
