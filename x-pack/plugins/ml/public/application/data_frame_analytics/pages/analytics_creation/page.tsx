@@ -47,19 +47,19 @@ export const Page: FC = () => {
   const { switchToAdvancedEditor } = createAnalyticsForm.actions;
 
   useEffect(() => {
-    if (activatedSteps[currentStep] === false) {
-      activatedSteps.splice(currentStep, 1, true);
-      setActivatedSteps(activatedSteps);
-    }
-  }, [currentStep]);
-
-  useEffect(() => {
     if (currentIndexPattern) {
       (async function () {
         await newJobCapsService.initializeFromIndexPattern(currentIndexPattern, false, false);
       })();
     }
   }, []);
+
+  useEffect(() => {
+    if (activatedSteps[currentStep] === false) {
+      activatedSteps.splice(currentStep, 1, true);
+      setActivatedSteps(activatedSteps);
+    }
+  }, [currentStep]);
 
   const analyticsWizardSteps = [
     {
