@@ -129,7 +129,7 @@ export function MachineLearningDataFrameAnalyticsCreationProvider(
     },
 
     async assertIncludeFieldsSelectionExists() {
-      await testSubjects.existOrFail('mlAnalyticsCreateJobWizardIncludesSelect', { timeout: 5000 });
+      await testSubjects.existOrFail('mlAnalyticsCreateJobWizardIncludesSelect', { timeout: 8000 });
     },
 
     // async assertIncludedFieldsSelection(expectedSelection: string[]) {
@@ -206,6 +206,10 @@ export function MachineLearningDataFrameAnalyticsCreationProvider(
 
     async assertTrainingPercentInputMissing() {
       await testSubjects.missingOrFail('mlAnalyticsCreateJobWizardTrainingPercentSlider');
+    },
+
+    async assertPredictionFieldNameInputMissing() {
+      await testSubjects.missingOrFail('mlAnalyticsCreateJobWizardPredictionFieldNameInput');
     },
 
     async assertTrainingPercentValue(expectedValue: string) {
@@ -428,6 +432,8 @@ export function MachineLearningDataFrameAnalyticsCreationProvider(
       if (isClassificationAnalysis(analysis) || isRegressionAnalysis(analysis)) {
         // @ts-ignore
         await this.assertPredictionFieldNameValue(analysis[jobType].prediction_field_name);
+      } else {
+        await this.assertPredictionFieldNameInputMissing();
       }
     },
 
