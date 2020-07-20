@@ -46,10 +46,18 @@ export function MachineLearningDataFrameAnalyticsCreationProvider(
     },
 
     async assertJobTypeSelection(expectedSelection: string) {
-      const actualSelection = await testSubjects.getAttribute(
+      let actualSelection = await testSubjects.getAttribute(
         'mlAnalyticsCreateJobWizardJobTypeSelect',
         'value'
       );
+      // Retry once more if empty to account for state initialization
+      if (actualSelection === '') {
+        actualSelection = await testSubjects.getAttribute(
+          'mlAnalyticsCreateJobWizardJobTypeSelect',
+          'value'
+        );
+      }
+
       expect(actualSelection).to.eql(
         expectedSelection,
         `Job type selection should be '${expectedSelection}' (got '${actualSelection}')`
@@ -488,6 +496,9 @@ export function MachineLearningDataFrameAnalyticsCreationProvider(
     },
 
     async assertInitialCloneJobDetailsStep(job: DataFrameAnalyticsConfig) {
+      await retry.tryForTime(5000, async () => {
+        await this.assertJobIdInputExists();
+      });
       await this.assertJobIdValue(''); // id should be empty
       await this.assertJobDescriptionValue(String(job.description));
       await this.assertDestIndexValue(''); // destination index should be empty
