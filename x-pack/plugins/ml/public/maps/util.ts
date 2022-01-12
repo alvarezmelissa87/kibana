@@ -12,7 +12,7 @@ import { MLAnomalyDoc } from '../../common/types/anomalies';
 export async function getResultsForJobId(
   mlResultsService: any,
   jobId: string,
-  locationType: 'typical' | 'actual'
+  locationType: 'typical' | 'actual' | 'connected'
 ): Promise<FeatureCollection> {
   // Query to look for the highest scoring anomaly.
   const body: any = {
@@ -70,12 +70,21 @@ export async function getResultsForJobId(
   }
 
   const features: Feature[] = hits!.map((result) => {
-    return {
-      type: 'Feature',
-      geometry: {
+    let geometry;
+    if (locationType === 'typical' || locationType === 'actual') {
+      geometry = {
         type: 'Point',
         coordinates: locationType === 'typical' ? result.typical : result.actual,
-      },
+      };
+    } else {
+      geometry = {
+        type: 'LineString',
+        coordinates: [result.typical, result.actual],
+      };
+    }
+    return {
+      type: 'Feature',
+      geometry,
       properties: {
         record_score: result.record_score,
       },

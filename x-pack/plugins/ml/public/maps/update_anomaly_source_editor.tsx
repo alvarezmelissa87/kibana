@@ -13,7 +13,7 @@ import { LayerSelector } from './layer_selector';
 
 interface Props {
   onChange: (...args: Array<{ propName: string; value: unknown }>) => void;
-  typicalActual: 'typical' | 'actual';
+  typicalActual: 'typical' | 'actual' | 'connected';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
