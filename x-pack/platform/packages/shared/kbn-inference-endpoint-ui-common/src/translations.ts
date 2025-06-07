@@ -188,7 +188,7 @@ export const ENDPOINT_UPDATE_FAILED = i18n.translate(
 export const ADAPTIVE_ALLOCATIONS_TITLE = i18n.translate(
   'xpack.inferenceEndpointUICommon.components.adaptiveAllocationsTitle',
   {
-    defaultMessage: 'Adaptive allocations will be enabled for this endpoint',
+    defaultMessage: 'Adaptive allocations enabled',
   }
 );
 
