@@ -1,0 +1,585 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0; you may not use this file except in compliance with the Elastic License
+ * 2.0.
+ */
+
+/**
+ * Scout migration of:
+ * x-pack/platform/test/functional/apps/ml/data_frame_analytics/group1/cloning.ts
+ *
+ * Covers the full cloning journey for classification, outlier detection, and
+ * regression DFA jobs — verifying that the creation wizard is pre-populated
+ * with the original job's configuration and that the cloned job runs to
+ * completion.
+ *
+ * Tagged @local-stateful-classic because the tests mutate global ML indices and
+ * depend on the DFA feature which is not yet verified on serverless.
+ */
+
+import { expect } from '@kbn/scout/ui';
+import { test, ML_USERS } from '../fixtures';
+import { createDfaJob, cleanupDfaCloningTest } from '../fixtures/helpers/dfa';
+
+// ── Shared timestamp ensures unique job IDs per test run ─────────────────────
+
+const ts = Date.now();
+
+// ── Classification job config ─────────────────────────────────────────────────
+
+const CLASSIFICATION = {
+  archive: 'x-pack/platform/test/fixtures/es_archives/ml/bm_classification',
+  sourceViewTitle: 'ft_bank_marketing',
+  jobId: `bm_1_${ts}`,
+  destIndex: `user-bm_1_${ts}`,
+  cloneJobId: `bm_1_${ts}_clone`,
+  cloneDestIndex: `user-bm_1_${ts}_clone`,
+  jobConfig: {
+    id: `bm_1_${ts}`,
+    description:
+      "Classification job based on 'ft_bank_marketing' dataset with dependentVariable 'y' and trainingPercent '20'",
+    source: { index: ['ft_bank_marketing'], query: { match_all: {} } },
+    dest: { index: `user-bm_1_${ts}`, results_field: 'ml' },
+    analysis: {
+      classification: {
+        prediction_field_name: 'test',
+        dependent_variable: 'y',
+        training_percent: 20,
+      },
+    },
+    analyzed_fields: { includes: [], excludes: [] },
+    model_memory_limit: '60mb',
+    allow_lazy_start: false,
+  },
+  expectedJobType: 'classification',
+  expectedDependentVariable: 'y',
+  expectedTrainingPercent: '20',
+  expectedPredictionFieldName: 'test',
+  // 5 callouts: dep_var_check + training_percent + num_top_classes + analysis_fields_count
+  // (warning: "Classification requires ≥2 fields"; triggered because analyzed_fields.includes=[]
+  // is sent as-is to the validation API, which interprets it as 0 analyzed fields) + analysis_fields
+  expectedValidationCallouts: 5,
+  expectedRow: {
+    type: 'classification',
+    status: 'stopped',
+    progress: '100',
+  },
+};
+
+// ── Outlier detection job config ──────────────────────────────────────────────
+
+const OUTLIER = {
+  archive: 'x-pack/platform/test/fixtures/es_archives/ml/ihp_outlier',
+  sourceViewTitle: 'ft_ihp_outlier',
+  jobId: `ihp_1_${ts}`,
+  destIndex: `user-ihp_1_${ts}`,
+  cloneJobId: `ihp_1_${ts}_clone`,
+  cloneDestIndex: `user-ihp_1_${ts}_clone`,
+  jobConfig: {
+    id: `ihp_1_${ts}`,
+    description: 'This is the job description',
+    source: { index: ['ft_ihp_outlier'], query: { match_all: {} } },
+    dest: { index: `user-ihp_1_${ts}`, results_field: 'ml' },
+    analysis: { outlier_detection: {} },
+    analyzed_fields: { includes: [], excludes: [] },
+    model_memory_limit: '5mb',
+  },
+  expectedJobType: 'outlier_detection',
+  // 2 callouts: analysis_fields_count (warning: "Outlier detection requires ≥1 field";
+  // triggered because analyzed_fields.includes=[] is interpreted as 0 fields) + analysis_fields
+  expectedValidationCallouts: 2,
+  expectedRow: {
+    type: 'outlier_detection',
+    status: 'stopped',
+    progress: '100',
+  },
+};
+
+// ── Regression job config ─────────────────────────────────────────────────────
+
+const REGRESSION = {
+  archive: 'x-pack/platform/test/fixtures/es_archives/ml/egs_regression',
+  sourceViewTitle: 'ft_egs_regression',
+  jobId: `egs_1_${ts}`,
+  destIndex: `user-egs_1_${ts}`,
+  cloneJobId: `egs_1_${ts}_clone`,
+  cloneDestIndex: `user-egs_1_${ts}_clone`,
+  jobConfig: {
+    id: `egs_1_${ts}`,
+    description: 'This is the job description',
+    source: { index: ['ft_egs_regression'], query: { match_all: {} } },
+    dest: { index: `user-egs_1_${ts}`, results_field: 'ml' },
+    analysis: {
+      regression: {
+        prediction_field_name: 'test',
+        dependent_variable: 'stab',
+        training_percent: 20,
+      },
+    },
+    analyzed_fields: { includes: [], excludes: [] },
+    model_memory_limit: '20mb',
+  },
+  expectedJobType: 'regression',
+  expectedDependentVariable: 'stab',
+  expectedTrainingPercent: '20',
+  expectedPredictionFieldName: 'test',
+  // 4 callouts: dep_var_check + training_percent + analysis_fields_count (same 0-field warning
+  // as classification) + analysis_fields. Regression has no num_top_classes message.
+  expectedValidationCallouts: 4,
+  expectedRow: {
+    type: 'regression',
+    status: 'stopped',
+    progress: '100',
+  },
+};
+
+// ── Spec ──────────────────────────────────────────────────────────────────────
+
+test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
+  let classificationSourceViewId: string | undefined;
+  let outlierSourceViewId: string | undefined;
+  let regressionSourceViewId: string | undefined;
+
+  test.beforeAll(async ({ esArchiver, apiServices, kbnClient, esClient }) => {
+    // Defensive cleanup: remove any jobs left over from a previously interrupted run
+    // so that createDfaJob does not fail with "resource already exists".
+    await Promise.allSettled([
+      esClient.ml
+        .deleteDataFrameAnalytics({ id: CLASSIFICATION.jobId, force: true })
+        .catch(() => undefined),
+      esClient.ml
+        .deleteDataFrameAnalytics({ id: OUTLIER.jobId, force: true })
+        .catch(() => undefined),
+      esClient.ml
+        .deleteDataFrameAnalytics({ id: REGRESSION.jobId, force: true })
+        .catch(() => undefined),
+    ]);
+
+    // Load archives (idempotent)
+    await esArchiver.loadIfNeeded(CLASSIFICATION.archive);
+    await esArchiver.loadIfNeeded(OUTLIER.archive);
+    await esArchiver.loadIfNeeded(REGRESSION.archive);
+
+    // Create source data views
+    const [classView, outlierView, regressionView] = await Promise.all([
+      apiServices.dataViews.create({
+        title: CLASSIFICATION.sourceViewTitle,
+        name: CLASSIFICATION.sourceViewTitle,
+        override: true,
+      }),
+      apiServices.dataViews.create({
+        title: OUTLIER.sourceViewTitle,
+        name: OUTLIER.sourceViewTitle,
+        override: true,
+      }),
+      apiServices.dataViews.create({
+        title: REGRESSION.sourceViewTitle,
+        name: REGRESSION.sourceViewTitle,
+        override: true,
+      }),
+    ]);
+    classificationSourceViewId = classView.data.id;
+    outlierSourceViewId = outlierView.data.id;
+    regressionSourceViewId = regressionView.data.id;
+
+    // Create the original jobs (NOT started; they just need to exist in the table)
+    await Promise.all([
+      createDfaJob({ kbnClient, jobConfig: CLASSIFICATION.jobConfig }),
+      createDfaJob({ kbnClient, jobConfig: OUTLIER.jobConfig }),
+      createDfaJob({ kbnClient, jobConfig: REGRESSION.jobConfig }),
+    ]);
+  });
+
+  test.afterAll(async ({ apiServices, esClient }) => {
+    // Run all three cleanups in parallel; a failure in one must not block the others.
+    await Promise.allSettled([
+      cleanupDfaCloningTest({
+        apiServices,
+        esClient,
+        originalJobId: CLASSIFICATION.jobId,
+        cloneJobId: CLASSIFICATION.cloneJobId,
+        sourceDataViewId: classificationSourceViewId,
+        originalDestIndex: CLASSIFICATION.destIndex,
+        cloneDestIndex: CLASSIFICATION.cloneDestIndex,
+      }),
+      cleanupDfaCloningTest({
+        apiServices,
+        esClient,
+        originalJobId: OUTLIER.jobId,
+        cloneJobId: OUTLIER.cloneJobId,
+        sourceDataViewId: outlierSourceViewId,
+        originalDestIndex: OUTLIER.destIndex,
+        cloneDestIndex: OUTLIER.cloneDestIndex,
+      }),
+      cleanupDfaCloningTest({
+        apiServices,
+        esClient,
+        originalJobId: REGRESSION.jobId,
+        cloneJobId: REGRESSION.cloneJobId,
+        sourceDataViewId: regressionSourceViewId,
+        originalDestIndex: REGRESSION.destIndex,
+        cloneDestIndex: REGRESSION.cloneDestIndex,
+      }),
+    ]);
+  });
+
+  // ── Classification cloning ──────────────────────────────────────────────
+
+  test('clones a classification job through the wizard', async ({
+    page,
+    browserAuth,
+    pageObjects: { dataFrameAnalytics },
+    esClient,
+  }) => {
+    test.setTimeout(15 * 60 * 1000);
+
+    await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
+
+    await test.step('opens the wizard in clone mode', async () => {
+      await dataFrameAnalytics.gotoJobList();
+      await dataFrameAnalytics.filterByJobId(CLASSIFICATION.jobId);
+      await dataFrameAnalytics.cloneJob(CLASSIFICATION.jobId);
+
+      await expect(page.testSubj.locator('mlDataFrameAnalyticsWizardHeaderTitle')).toContainText(
+        'Clone job'
+      );
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardConfigurationStep active')
+      ).toBeVisible();
+    });
+
+    await test.step('verifies config step is pre-populated', async () => {
+      // Job type is pre-selected
+      await expect(
+        page.testSubj.locator(
+          `mlAnalyticsCreation-${CLASSIFICATION.expectedJobType}-option selectedJobType`
+        )
+      ).toBeVisible();
+
+      // Dependent variable and training percent are pre-populated for classification
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardDependentVariableSelect loaded')
+      ).toBeVisible({ timeout: 30_000 });
+      // comboBoxSearchInput is the actual <input> inside OptionListWithFieldStats;
+      // comboBoxInput is the EuiFormControlLayout wrapper div and does not support toHaveValue.
+      await expect(
+        page.testSubj
+          .locator('~mlAnalyticsCreateJobWizardDependentVariableSelect')
+          .locator('[data-test-subj="comboBoxSearchInput"]')
+      ).toHaveValue(CLASSIFICATION.expectedDependentVariable);
+
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardTrainingPercentSlider')
+      ).toHaveAttribute('value', CLASSIFICATION.expectedTrainingPercent);
+
+      await dataFrameAnalytics.continueToAdditionalOptions();
+    });
+
+    await test.step('verifies additional options step is pre-populated', async () => {
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardPredictionFieldNameInput')
+      ).toHaveValue(CLASSIFICATION.expectedPredictionFieldName);
+
+      await dataFrameAnalytics.continueToDetails();
+    });
+
+    await test.step('verifies details step and sets clone job values', async () => {
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobFlyoutJobIdInput')).toHaveValue('');
+
+      await expect(page.testSubj.locator('mlDFAnalyticsJobCreationJobDescription')).toHaveValue(
+        CLASSIFICATION.jobConfig.description
+      );
+
+      await expect(
+        page.testSubj.locator('mlCreationWizardUtilsJobIdAsDestIndexNameSwitch')
+      ).toHaveAttribute('aria-checked', 'true');
+
+      await dataFrameAnalytics.setJobId(CLASSIFICATION.cloneJobId);
+      await dataFrameAnalytics.setDestIndexSameAsJobId(false);
+      await dataFrameAnalytics.setDestinationIndex(CLASSIFICATION.cloneDestIndex);
+
+      await dataFrameAnalytics.continueToValidation();
+    });
+
+    await test.step('validates and creates the clone job', async () => {
+      await expect(page.testSubj.locator('~mlValidationCallout')).not.toHaveCount(0);
+      await expect(page.testSubj.locator('~mlValidationCallout')).toHaveCount(
+        CLASSIFICATION.expectedValidationCallouts
+      );
+
+      await dataFrameAnalytics.continueToCreate();
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')
+      ).not.toBeDisabled();
+    });
+
+    await test.step('runs the clone job and verifies it in the job list', async () => {
+      await dataFrameAnalytics.createAndStartJob();
+
+      await expect
+        .poll(
+          async () => {
+            const { data_frame_analytics: statsList } =
+              await esClient.ml.getDataFrameAnalyticsStats({
+                id: CLASSIFICATION.cloneJobId,
+                allow_no_match: true,
+              });
+            return statsList[0]?.state;
+          },
+          { timeout: 5 * 60 * 1000, intervals: [5_000] }
+        )
+        .toBe('stopped');
+
+      await dataFrameAnalytics.gotoJobList();
+      await dataFrameAnalytics.filterByJobId(CLASSIFICATION.cloneJobId);
+
+      await expect
+        .poll(async () => (await dataFrameAnalytics.getRowData(CLASSIFICATION.cloneJobId)).status, {
+          timeout: 60_000,
+          intervals: [3_000],
+        })
+        .toBe(CLASSIFICATION.expectedRow.status);
+
+      const rowData = await dataFrameAnalytics.getRowData(CLASSIFICATION.cloneJobId);
+      expect(rowData).toMatchObject({
+        id: CLASSIFICATION.cloneJobId,
+        type: CLASSIFICATION.expectedRow.type,
+        status: CLASSIFICATION.expectedRow.status,
+        progress: CLASSIFICATION.expectedRow.progress,
+      });
+    });
+  });
+
+  // ── Outlier detection cloning ───────────────────────────────────────────
+
+  test('clones an outlier detection job through the wizard', async ({
+    page,
+    browserAuth,
+    pageObjects: { dataFrameAnalytics },
+    esClient,
+  }) => {
+    test.setTimeout(15 * 60 * 1000);
+
+    await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
+
+    await test.step('opens the wizard in clone mode', async () => {
+      await dataFrameAnalytics.gotoJobList();
+      await dataFrameAnalytics.filterByJobId(OUTLIER.jobId);
+      await dataFrameAnalytics.cloneJob(OUTLIER.jobId);
+
+      await expect(page.testSubj.locator('mlDataFrameAnalyticsWizardHeaderTitle')).toContainText(
+        'Clone job'
+      );
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardConfigurationStep active')
+      ).toBeVisible();
+    });
+
+    await test.step('verifies config step — outlier detection has no dependent variable', async () => {
+      await expect(
+        page.testSubj.locator(
+          `mlAnalyticsCreation-${OUTLIER.expectedJobType}-option selectedJobType`
+        )
+      ).toBeVisible();
+      // Outlier detection has no dependent variable or training percent fields
+      await expect(
+        page.testSubj.locator('~mlAnalyticsCreateJobWizardDependentVariableSelect')
+      ).not.toBeVisible();
+
+      await dataFrameAnalytics.continueToAdditionalOptions();
+    });
+
+    await test.step('continues to details step and sets clone job values', async () => {
+      // Additional options step: no prediction_field_name for outlier detection
+      await dataFrameAnalytics.continueToDetails();
+
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobFlyoutJobIdInput')).toHaveValue('');
+
+      await expect(page.testSubj.locator('mlDFAnalyticsJobCreationJobDescription')).toHaveValue(
+        OUTLIER.jobConfig.description
+      );
+
+      await expect(
+        page.testSubj.locator('mlCreationWizardUtilsJobIdAsDestIndexNameSwitch')
+      ).toHaveAttribute('aria-checked', 'true');
+
+      await dataFrameAnalytics.setJobId(OUTLIER.cloneJobId);
+      await dataFrameAnalytics.setDestIndexSameAsJobId(false);
+      await dataFrameAnalytics.setDestinationIndex(OUTLIER.cloneDestIndex);
+
+      await dataFrameAnalytics.continueToValidation();
+    });
+
+    await test.step('validates and creates the clone job', async () => {
+      await expect(page.testSubj.locator('~mlValidationCallout')).not.toHaveCount(0);
+      await expect(page.testSubj.locator('~mlValidationCallout')).toHaveCount(
+        OUTLIER.expectedValidationCallouts
+      );
+
+      await dataFrameAnalytics.continueToCreate();
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')
+      ).not.toBeDisabled();
+    });
+
+    await test.step('runs the clone job and verifies it in the job list', async () => {
+      await dataFrameAnalytics.createAndStartJob();
+
+      await expect
+        .poll(
+          async () => {
+            const { data_frame_analytics: statsList } =
+              await esClient.ml.getDataFrameAnalyticsStats({
+                id: OUTLIER.cloneJobId,
+                allow_no_match: true,
+              });
+            return statsList[0]?.state;
+          },
+          { timeout: 5 * 60 * 1000, intervals: [5_000] }
+        )
+        .toBe('stopped');
+
+      await dataFrameAnalytics.gotoJobList();
+      await dataFrameAnalytics.filterByJobId(OUTLIER.cloneJobId);
+
+      await expect
+        .poll(async () => (await dataFrameAnalytics.getRowData(OUTLIER.cloneJobId)).status, {
+          timeout: 60_000,
+          intervals: [3_000],
+        })
+        .toBe(OUTLIER.expectedRow.status);
+
+      const rowData = await dataFrameAnalytics.getRowData(OUTLIER.cloneJobId);
+      expect(rowData).toMatchObject({
+        id: OUTLIER.cloneJobId,
+        type: OUTLIER.expectedRow.type,
+        status: OUTLIER.expectedRow.status,
+        progress: OUTLIER.expectedRow.progress,
+      });
+    });
+  });
+
+  // ── Regression cloning ──────────────────────────────────────────────────
+
+  test('clones a regression job through the wizard', async ({
+    page,
+    browserAuth,
+    pageObjects: { dataFrameAnalytics },
+    esClient,
+  }) => {
+    test.setTimeout(15 * 60 * 1000);
+
+    await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
+
+    await test.step('opens the wizard in clone mode', async () => {
+      await dataFrameAnalytics.gotoJobList();
+      await dataFrameAnalytics.filterByJobId(REGRESSION.jobId);
+      await dataFrameAnalytics.cloneJob(REGRESSION.jobId);
+
+      await expect(page.testSubj.locator('mlDataFrameAnalyticsWizardHeaderTitle')).toContainText(
+        'Clone job'
+      );
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardConfigurationStep active')
+      ).toBeVisible();
+    });
+
+    await test.step('verifies config step is pre-populated', async () => {
+      await expect(
+        page.testSubj.locator(
+          `mlAnalyticsCreation-${REGRESSION.expectedJobType}-option selectedJobType`
+        )
+      ).toBeVisible();
+
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardDependentVariableSelect loaded')
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(
+        page.testSubj
+          .locator('~mlAnalyticsCreateJobWizardDependentVariableSelect')
+          .locator('[data-test-subj="comboBoxSearchInput"]')
+      ).toHaveValue(REGRESSION.expectedDependentVariable);
+
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardTrainingPercentSlider')
+      ).toHaveAttribute('value', REGRESSION.expectedTrainingPercent);
+
+      await dataFrameAnalytics.continueToAdditionalOptions();
+    });
+
+    await test.step('verifies additional options step is pre-populated', async () => {
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardPredictionFieldNameInput')
+      ).toHaveValue(REGRESSION.expectedPredictionFieldName);
+
+      await dataFrameAnalytics.continueToDetails();
+    });
+
+    await test.step('verifies details step and sets clone job values', async () => {
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobFlyoutJobIdInput')).toHaveValue('');
+
+      await expect(page.testSubj.locator('mlDFAnalyticsJobCreationJobDescription')).toHaveValue(
+        REGRESSION.jobConfig.description
+      );
+
+      await expect(
+        page.testSubj.locator('mlCreationWizardUtilsJobIdAsDestIndexNameSwitch')
+      ).toHaveAttribute('aria-checked', 'true');
+
+      await dataFrameAnalytics.setJobId(REGRESSION.cloneJobId);
+      await dataFrameAnalytics.setDestIndexSameAsJobId(false);
+      await dataFrameAnalytics.setDestinationIndex(REGRESSION.cloneDestIndex);
+
+      await dataFrameAnalytics.continueToValidation();
+    });
+
+    await test.step('validates and creates the clone job', async () => {
+      await expect(page.testSubj.locator('~mlValidationCallout')).not.toHaveCount(0);
+      await expect(page.testSubj.locator('~mlValidationCallout')).toHaveCount(
+        REGRESSION.expectedValidationCallouts
+      );
+
+      await dataFrameAnalytics.continueToCreate();
+      await expect(
+        page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')
+      ).not.toBeDisabled();
+    });
+
+    await test.step('runs the clone job and verifies it in the job list', async () => {
+      await dataFrameAnalytics.createAndStartJob();
+
+      await expect
+        .poll(
+          async () => {
+            const { data_frame_analytics: statsList } =
+              await esClient.ml.getDataFrameAnalyticsStats({
+                id: REGRESSION.cloneJobId,
+                allow_no_match: true,
+              });
+            return statsList[0]?.state;
+          },
+          { timeout: 5 * 60 * 1000, intervals: [5_000] }
+        )
+        .toBe('stopped');
+
+      await dataFrameAnalytics.gotoJobList();
+      await dataFrameAnalytics.filterByJobId(REGRESSION.cloneJobId);
+
+      await expect
+        .poll(async () => (await dataFrameAnalytics.getRowData(REGRESSION.cloneJobId)).status, {
+          timeout: 60_000,
+          intervals: [3_000],
+        })
+        .toBe(REGRESSION.expectedRow.status);
+
+      const rowData = await dataFrameAnalytics.getRowData(REGRESSION.cloneJobId);
+      expect(rowData).toMatchObject({
+        id: REGRESSION.cloneJobId,
+        type: REGRESSION.expectedRow.type,
+        status: REGRESSION.expectedRow.status,
+        progress: REGRESSION.expectedRow.progress,
+      });
+    });
+  });
+});

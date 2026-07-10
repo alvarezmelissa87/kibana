@@ -281,14 +281,28 @@ export class DataFrameAnalyticsPage {
   }
 
   private async openActionsMenu(jobId: string): Promise<void> {
-    await this.page.testSubj
+    // The analytics table auto-refreshes every 30 s (DEFAULT_REFRESH_INTERVAL_MS).
+    // If a refresh fires between the click and the visibility check the
+    // CollapsedItemActions component unmounts, its local `isOpen` state resets, and
+    // the popover closes.  Mirror the FTR's ensureJobActionsMenuOpen retry strategy:
+    // click → waitFor with short timeout → catch → retry.
+    const actionsButton = this.page.testSubj
       .locator('~mlAnalyticsTable')
       .locator(`[data-test-subj~="row-${jobId}"]`)
-      .locator('[data-test-subj="euiCollapsedItemActionsButton"]')
-      .click();
-    // Wait for the edit button to confirm the menu opened; avoids relying on the
-    // unscoped mlAnalyticsJobDeleteButton that could match a stale menu for another row.
-    await this.page.testSubj.locator('mlAnalyticsJobEditButton').waitFor({ state: 'visible' });
+      .locator('[data-test-subj="euiCollapsedItemActionsButton"]');
+    const cloneButton = this.page.testSubj.locator('mlAnalyticsJobCloneButton');
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await actionsButton.click();
+      try {
+        await cloneButton.waitFor({ state: 'visible', timeout: 5_000 });
+        return;
+      } catch {
+        // Popover likely closed due to a table auto-refresh; retry.
+      }
+    }
+    // Final attempt — if it still fails, the error is descriptive.
+    await cloneButton.waitFor({ state: 'visible', timeout: 5_000 });
   }
 
   async openEditFlyout(jobId: string): Promise<void> {
@@ -297,24 +311,33 @@ export class DataFrameAnalyticsPage {
     await this.page.testSubj.locator('mlAnalyticsEditFlyout').waitFor({ state: 'visible' });
   }
 
-  async openResultsView(jobId: string): Promise<void> {
-    await this.page.testSubj
-      .locator('~mlAnalyticsTable')
-      .locator(`[data-test-subj~="row-${jobId}"]`)
-      .locator('[data-test-subj="mlAnalyticsJobViewButton"]')
-      .click();
+  async openResultsView(jobId: string, analysisType: string): Promise<void> {
+    // Navigate directly to the ML app exploration URL rather than clicking the
+    // showOnHover table row button.  The button approach is fragile because:
+    //   1. The button is CSS-hidden until the row is hovered (showOnHover: true).
+    //   2. Clicking it triggers a cross-app navigation (management → ml app) via
+    //      navigateToUrl, which Playwright's locator.waitFor doesn't reliably
+    //      detect when the destination page takes >5 s to mount.
+    // Direct navigation mirrors the URL that the view action constructs via
+    // mlLocator.getUrl (see use_view_action.tsx / formatDataFrameAnalyticsExplorationUrl).
+    // analysisType values: 'classification' | 'regression' | 'outlier_detection'
+    const rison = `(ml:(analysisType:${analysisType},jobId:${jobId}))`;
+    await this.page.goto(this.kbnUrl.app(`ml/data_frame_analytics/exploration?_g=${rison}`));
     await this.page.testSubj
       .locator('mlPageDataFrameAnalyticsExploration')
-      .waitFor({ state: 'visible' });
+      .waitFor({ state: 'visible', timeout: 30_000 });
   }
 
   async openMapView(jobId: string): Promise<void> {
-    await this.page.testSubj
+    // mapAction has isPrimary:true — same showOnHover pattern as the view button.
+    const row = this.page.testSubj
       .locator('~mlAnalyticsTable')
-      .locator(`[data-test-subj~="row-${jobId}"]`)
-      .locator('[data-test-subj="mlAnalyticsJobMapButton"]')
-      .click();
-    await this.page.testSubj.locator('mlPageDataFrameAnalyticsMap').waitFor({ state: 'visible' });
+      .locator(`[data-test-subj~="row-${jobId}"]`);
+    await row.hover();
+    await row.locator('[data-test-subj="mlAnalyticsJobMapButton"]').click();
+    await this.page.testSubj
+      .locator('mlPageDataFrameAnalyticsMap')
+      .waitFor({ state: 'visible', timeout: 30_000 });
   }
 
   // ── Configuration step: dependent variable & training percent ─────────────
@@ -438,6 +461,211 @@ export class DataFrameAnalyticsPage {
   async submitEdit(): Promise<void> {
     await this.page.testSubj.locator('mlAnalyticsEditFlyoutUpdateButton').click();
     await this.page.testSubj.locator('mlAnalyticsEditFlyout').waitFor({ state: 'hidden' });
+  }
+
+  // ── Clone flow ────────────────────────────────────────────────────────────
+
+  /**
+   * Opens the actions menu for the given job and clicks Clone, then waits for
+   * the creation wizard to be visible. Hides the multi-step open-menu sequence
+   * that would otherwise repeat across each clone test.
+   */
+  async cloneJob(jobId: string): Promise<void> {
+    await this.openActionsMenu(jobId);
+    await this.page.testSubj.locator('mlAnalyticsJobCloneButton').click();
+    await this.page.testSubj.locator('mlAnalyticsCreationContainer').waitFor({ state: 'visible' });
+  }
+
+  // ── Results view ──────────────────────────────────────────────────────────
+
+  /**
+   * Opens the feature importance popover for the first feature-importance cell
+   * in the exploration data grid. Uses hover to reveal the cell action button,
+   * then clicks it and waits for the popover to appear.
+   *
+   * Identifies the cell by data-gridcell-column-id containing "feature_importance"
+   * (a stable EUI DataGrid attribute) rather than a CSS class name.
+   *
+   * The exploration page layout places the Results data grid below the
+   * EvaluatePanel and FeatureImportanceSummaryPanel sections. After
+   * expandFeatureImportanceSection() scrolls the page to the summary section,
+   * the Results grid (regression in particular) may be partially off-screen.
+   * In headless Playwright, EUI DataGrid's VariableSizeGrid can render no cells
+   * when its container reports a zero width. Scrolling the wrapper back into the
+   * viewport first allows the ResizeObserver to recompute the width and render
+   * the cells. We then wait directly for the feature importance cell to become
+   * visible rather than using an intermediate sentinel, which avoids selector
+   * fragility with EUI's internal data-gridcell-column-index attribute.
+   */
+  async openFeatureImportancePopover(): Promise<void> {
+    const dataGrid = this.page.testSubj.locator('mlExplorationDataGrid loaded');
+
+    // Bring the grid into the viewport. For regression, the evaluate panel is
+    // shorter than for classification, so the results grid scrolls further off-
+    // screen after expandFeatureImportanceSection(). Without this step the EUI
+    // VariableSizeGrid sees finalWidth=0 and renders no cells.
+    await dataGrid.scrollIntoViewIfNeeded();
+
+    // data-gridcell-column-id is set by EUI DataGrid to the column's id string.
+    // All feature-importance columns contain "feature_importance" in their id
+    // (e.g. "ml.feature_importance", "ml_central_air.feature_importance").
+    // Row index 0 targets the first data row (header cells carry row index -1).
+    // We wait up to 20 s to accommodate the two-step EUI render cycle: first
+    // VariableSizeGrid mounts (finalWidth > 0), then rows appear once the header
+    // resize observer fires (headerRowHeight > 0).
+    const featureImportanceCell = this.page.locator(
+      '[data-gridcell-row-index="0"][data-gridcell-column-id*="feature_importance"]'
+    );
+    await featureImportanceCell.waitFor({ state: 'visible', timeout: 20_000 });
+    await featureImportanceCell.scrollIntoViewIfNeeded();
+    await featureImportanceCell.hover();
+    // Hover reveals a single interaction button inside the cell.
+    const button = featureImportanceCell.locator('button');
+    await button.waitFor({ state: 'visible' });
+    await button.click();
+    await this.page.testSubj.locator('mlDFAFeatureImportancePopover').waitFor({ state: 'visible' });
+  }
+
+  /**
+   * Expands the "Feature Importance Summary" section if it is collapsed, then
+   * waits for the content to be visible. Extracted from specs to avoid
+   * repeating the same conditional-toggle sequence across multiple tests.
+   */
+  async expandFeatureImportanceSection(): Promise<void> {
+    await this.page.testSubj
+      .locator('mlDFExpandableSection-FeatureImportanceSummary')
+      .scrollIntoViewIfNeeded();
+    const content = this.page.testSubj.locator(
+      'mlDFExpandableSection-FeatureImportanceSummary-content'
+    );
+    if (!(await content.isVisible())) {
+      await this.page.testSubj
+        .locator('mlDFExpandableSection-FeatureImportanceSummary-toggle-button')
+        .click();
+    }
+    await content.waitFor({ state: 'visible' });
+  }
+
+  /**
+   * Clicks the pagination button for page {@link pageNum} (1-based) on the
+   * exploration data grid and waits for the grid to reload.
+   */
+  async selectResultsTablePage(pageNum: number): Promise<void> {
+    // EUI pagination uses a 0-based index in the data-test-subj.
+    // Chain two locator calls: first scope to the grid, then find the button.
+    await this.page.testSubj
+      .locator('mlExplorationDataGrid loaded')
+      .locator(`[data-test-subj="pagination-button-${pageNum - 1}"]`)
+      .click();
+    await this.page.testSubj.locator('mlExplorationDataGrid loaded').waitFor({ state: 'visible' });
+  }
+
+  /**
+   * Toggles the histogram chart preview on or off. Reads the current
+   * aria-pressed state to avoid a redundant click.
+   */
+  async toggleHistogramCharts(enable: boolean): Promise<void> {
+    const button = this.page.testSubj.locator('mlExplorationDataGridHistogramButton');
+    const isPressed = (await button.getAttribute('aria-pressed')) === 'true';
+    if (isPressed !== enable) {
+      await button.click();
+    }
+  }
+
+  /**
+   * Returns the observable state for the per-column histogram chart container
+   * so the spec can assert chartContainerVisible, histogramVisible, id text,
+   * and optional legend text without duplicating brittle selector sequences.
+   */
+  async getHistogramChartState(columnId: string): Promise<{
+    chartContainerVisible: boolean;
+    histogramVisible: boolean;
+    idText: string;
+    legendText: string;
+  }> {
+    const container = this.page.testSubj.locator(`mlDataGridChart-${columnId}`);
+    const chartContainerVisible = await container.isVisible();
+
+    if (!chartContainerVisible) {
+      return { chartContainerVisible: false, histogramVisible: false, idText: '', legendText: '' };
+    }
+
+    const histogramVisible = await this.page.testSubj
+      .locator(`mlDataGridChart-${columnId}-histogram`)
+      .isVisible();
+    const idText = (
+      await this.page.testSubj.locator(`mlDataGridChart-${columnId}-id`).innerText()
+    ).trim();
+
+    let legendText = '';
+    const legendLocator = this.page.testSubj.locator(`mlDataGridChart-${columnId}-legend`);
+    if (await legendLocator.isVisible()) {
+      legendText = (await legendLocator.innerText()).trim();
+    }
+
+    return { chartContainerVisible, histogramVisible, idText, legendText };
+  }
+
+  /**
+   * Opens the EUI DataGrid column sort popover, adds {@link columnId} as a
+   * sort key with the given direction, then closes the popover.
+   */
+  async setSortColumn(columnId: string, direction: 'asc' | 'desc'): Promise<void> {
+    // Open the sort popover via the grid's toolbar button
+    await this.page.testSubj
+      .locator('mlExplorationDataGrid loaded')
+      .locator('[data-test-subj="dataGridColumnSortingButton"]')
+      .click();
+    // "Pick fields to sort by" button opens the column selection list
+    await this.page.testSubj
+      .locator('dataGridColumnSortingSelectionButton')
+      .waitFor({ state: 'visible' });
+    await this.page.testSubj.locator('dataGridColumnSortingSelectionButton').click();
+    // Select the column to sort by
+    await this.page.testSubj
+      .locator(`dataGridColumnSortingPopoverColumnSelection-${columnId}`)
+      .click();
+    // Click the desired direction
+    await this.page.testSubj
+      .locator(`euiDataGridColumnSorting-sortColumn-${columnId}-${direction}`)
+      .click();
+    // Close the popover
+    await this.page.keyboard.press('Escape');
+  }
+
+  /**
+   * Opens the EUI DataGrid column selector and clicks "Show all", then closes
+   * the panel.
+   */
+  async showAllColumns(): Promise<void> {
+    await this.page.testSubj
+      .locator('mlExplorationDataGrid loaded')
+      .locator('[data-test-subj="dataGridColumnSelectorButton"]')
+      .click();
+    await this.page.testSubj.locator('dataGridColumnSelectorShowAllButton').click();
+    await this.page.keyboard.press('Escape');
+  }
+
+  /**
+   * Opens the EUI DataGrid column selector and clicks "Hide all", then closes
+   * the panel.
+   */
+  async hideAllColumns(): Promise<void> {
+    await this.page.testSubj
+      .locator('mlExplorationDataGrid loaded')
+      .locator('[data-test-subj="dataGridColumnSelectorButton"]')
+      .click();
+    await this.page.testSubj.locator('dataGridColumnSelectorHideAllButton').click();
+    await this.page.keyboard.press('Escape');
+  }
+
+  /**
+   * Clicks the "Explore in custom visualization" link in the scatterplot matrix
+   * section. The caller must assert that `visualizationLoader` is visible after
+   * this call (navigation occurs; no return is needed).
+   */
+  async clickExploreInCustomVisualization(): Promise<void> {
+    await this.page.testSubj.locator('mlSplomExploreInCustomVisualizationLink').click();
   }
 
   // ── Custom URLs tab ───────────────────────────────────────────────────────
