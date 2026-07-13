@@ -5,6 +5,7 @@
  * 2.0.
  */
 
+import { errors } from '@elastic/elasticsearch';
 import type { KbnClient, ApiServicesFixture, EsClient } from '@kbn/scout';
 import { ML_TEST_DASHBOARD_ATTRIBUTES } from '../constants';
 
@@ -64,6 +65,42 @@ export const createDfaJob = async ({
   });
 };
 
+export const deleteDfaJobIfExists = async ({
+  esClient,
+  jobId,
+}: {
+  esClient: EsClient;
+  jobId: string;
+}): Promise<void> => {
+  try {
+    await esClient.ml.deleteDataFrameAnalytics({ id: jobId, force: true });
+  } catch (error) {
+    if (error instanceof errors.ResponseError && error.statusCode === 404) {
+      return;
+    }
+    throw error;
+  }
+};
+
+export const getDfaJobProgress = async ({
+  esClient,
+  jobId,
+}: {
+  esClient: EsClient;
+  jobId: string;
+}): Promise<{ state: string | undefined; hasTrainingDocs: boolean }> => {
+  const { data_frame_analytics: statsList } = await esClient.ml.getDataFrameAnalyticsStats({
+    id: jobId,
+    allow_no_match: true,
+  });
+  const stats = statsList[0];
+
+  return {
+    state: stats?.state,
+    hasTrainingDocs: (stats?.data_counts.training_docs_count ?? 0) > 0,
+  };
+};
+
 /**
  * Creates a DFA job, starts it, polls until `state === 'stopped'`, and syncs
  * Kibana saved objects so the job state is correctly reflected in the UI.
@@ -116,8 +153,7 @@ export const createAndRunDfaJob = async ({
 /**
  * Targeted cleanup for a DFA cloning test. Removes only the specific jobs and
  * indices created by a single test to avoid interfering with other tests.
- * Errors are silently swallowed so that a missing resource (e.g. clone job
- * was never created) does not block the rest of cleanup.
+ * All cleanup operations are attempted, while unexpected failures are surfaced.
  */
 export const cleanupDfaCloningTest = async ({
   apiServices,
@@ -136,31 +172,30 @@ export const cleanupDfaCloningTest = async ({
   originalDestIndex: string;
   cloneDestIndex: string;
 }): Promise<void> => {
-  for (const jobId of [originalJobId, cloneJobId]) {
-    await esClient.ml.deleteDataFrameAnalytics({ id: jobId, force: true }).catch(() => undefined);
-  }
-
-  if (sourceDataViewId) {
-    await apiServices.dataViews.delete(sourceDataViewId).catch(() => undefined);
-  }
-
-  await esClient.indices
-    .delete({ index: originalDestIndex, ignore_unavailable: true })
-    .catch(() => undefined);
-  await esClient.indices
-    .delete({ index: cloneDestIndex, ignore_unavailable: true })
-    .catch(() => undefined);
-
-  // Delete any Kibana data views that were auto-created for the dest indices.
-  // Fetch the full list once, then search for both titles to avoid two round-trips.
-  const allViews = await apiServices.dataViews
-    .getAll()
-    .catch(() => ({ data: [] as Array<{ id: string; title: string }> }));
-  for (const indexTitle of [originalDestIndex, cloneDestIndex]) {
-    const view = allViews.data.find((dv) => dv.title === indexTitle);
-    if (view) {
-      await apiServices.dataViews.delete(view.id).catch(() => undefined);
+  const deleteDestinationDataViews = async (): Promise<void> => {
+    const allViews = await apiServices.dataViews.getAll();
+    for (const indexTitle of [originalDestIndex, cloneDestIndex]) {
+      const view = allViews.data.find((dataView) => dataView.title === indexTitle);
+      if (view) {
+        await apiServices.dataViews.delete(view.id);
+      }
     }
+  };
+
+  const cleanupResults = await Promise.allSettled([
+    deleteDfaJobIfExists({ esClient, jobId: originalJobId }),
+    deleteDfaJobIfExists({ esClient, jobId: cloneJobId }),
+    sourceDataViewId ? apiServices.dataViews.delete(sourceDataViewId) : Promise.resolve(),
+    esClient.indices.delete({ index: originalDestIndex, ignore_unavailable: true }),
+    esClient.indices.delete({ index: cloneDestIndex, ignore_unavailable: true }),
+    deleteDestinationDataViews(),
+  ]);
+  const failures = cleanupResults
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map(({ reason }) => reason);
+
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Failed to clean up DFA cloning test resources');
   }
 };
 

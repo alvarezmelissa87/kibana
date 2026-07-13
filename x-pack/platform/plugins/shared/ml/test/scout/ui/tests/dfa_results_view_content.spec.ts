@@ -22,6 +22,12 @@ import { expect } from '@kbn/scout/ui';
 import { test, ML_USERS } from '../fixtures';
 import { createAndRunDfaJob, cleanupDfaResultsTest } from '../fixtures/helpers/dfa';
 
+interface ExpectedHistogramChart {
+  chartAvailable: boolean;
+  id: string;
+  legend?: string;
+}
+
 // ── Shared timestamp ensures unique job IDs per test run ─────────────────────
 
 const ts = Date.now();
@@ -75,7 +81,7 @@ const BINARY_CLASSIFICATION = {
     { chartAvailable: true, id: 'ml_central_air.prediction_score' },
     { chartAvailable: false, id: 'ml_central_air.top_classes' },
     { chartAvailable: true, id: '1stFlrSF' },
-  ],
+  ] as ExpectedHistogramChart[],
 };
 
 // ── Multi-class classification job ────────────────────────────────────────────
@@ -127,7 +133,7 @@ const MULTI_CLASS = {
     { chartAvailable: true, id: 'ml_heating_qc.prediction_score' },
     { chartAvailable: false, id: 'ml_heating_qc.top_classes', legend: 'Chart not supported.' },
     { chartAvailable: true, id: '1stFlrSF' },
-  ],
+  ] as ExpectedHistogramChart[],
 };
 
 // ── Regression job ────────────────────────────────────────────────────────────
@@ -181,7 +187,7 @@ const REGRESSION = {
     { chartAvailable: true, id: 'g2', legend: '0.05 - 1' },
     { chartAvailable: true, id: 'g3', legend: '0.05 - 1' },
     { chartAvailable: true, id: 'g4', legend: '0.05 - 1' },
-  ],
+  ] as ExpectedHistogramChart[],
 };
 
 // ── Spec ──────────────────────────────────────────────────────────────────────
@@ -293,14 +299,17 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
   test('binary classification results view: feature importance, histograms, columns, custom viz', async ({
     page,
     browserAuth,
-    pageObjects: { dataFrameAnalytics },
+    pageObjects: { dataFrameAnalytics, visualize },
   }) => {
     test.setTimeout(10 * 60 * 1000);
 
     await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
 
     await test.step('opens the results view', async () => {
-      await dataFrameAnalytics.openResultsView(BINARY_CLASSIFICATION.jobId, BINARY_CLASSIFICATION.analysisType);
+      await dataFrameAnalytics.openResultsView(
+        BINARY_CLASSIFICATION.jobId,
+        BINARY_CLASSIFICATION.analysisType
+      );
       await expect(page.testSubj.locator('mlExplorationDataGrid loaded')).toBeVisible({
         timeout: 30_000,
       });
@@ -330,7 +339,6 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
 
     await test.step('feature importance decision path popover opens after page change', async () => {
       await dataFrameAnalytics.selectResultsTablePage(3);
-      await expect(page.testSubj.locator('mlExplorationDataGrid loaded')).toBeVisible();
       await dataFrameAnalytics.openFeatureImportancePopover();
       await expect(page.testSubj.locator('mlDFAFeatureImportancePopover')).toBeVisible();
       await expect(
@@ -347,14 +355,13 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
         expect(state.chartContainerVisible).toBe(true);
         expect(state.histogramVisible).toBe(expected.chartAvailable);
         expect(state.idText).toBe(expected.id);
-        // Only assert legend when the test data specifies an expected value;
-        // use the actual value as the expectation otherwise (unconditional expect)
+        // Only assert legend when the test data specifies an expected value.
         expect(state.legendText).toBe(expected.legend ?? state.legendText);
       }
 
       await dataFrameAnalytics.toggleHistogramCharts(false);
       for (const expected of BINARY_CLASSIFICATION.expectedHistogramCharts) {
-        await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).not.toBeVisible();
+        await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).toBeHidden();
       }
     });
 
@@ -373,7 +380,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
 
     await test.step('custom visualization link navigates to visualization app', async () => {
       await dataFrameAnalytics.clickExploreInCustomVisualization();
-      await expect(page.testSubj.locator('visualizationLoader')).toBeVisible({ timeout: 15_000 });
+      await visualize.waitForVisualizationLoaded();
     });
   });
 
@@ -382,7 +389,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
   test('multi-class classification results view: feature importance, histograms, columns, custom viz', async ({
     page,
     browserAuth,
-    pageObjects: { dataFrameAnalytics },
+    pageObjects: { dataFrameAnalytics, visualize },
   }) => {
     test.setTimeout(10 * 60 * 1000);
 
@@ -417,7 +424,6 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
 
     await test.step('feature importance decision path popover opens after page change', async () => {
       await dataFrameAnalytics.selectResultsTablePage(3);
-      await expect(page.testSubj.locator('mlExplorationDataGrid loaded')).toBeVisible();
       await dataFrameAnalytics.openFeatureImportancePopover();
       await expect(page.testSubj.locator('mlDFAFeatureImportancePopover')).toBeVisible();
       await expect(
@@ -434,12 +440,13 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
         expect(state.chartContainerVisible).toBe(true);
         expect(state.histogramVisible).toBe(expected.chartAvailable);
         expect(state.idText).toBe(expected.id);
+        // Only assert legend when the test data specifies an expected value.
         expect(state.legendText).toBe(expected.legend ?? state.legendText);
       }
 
       await dataFrameAnalytics.toggleHistogramCharts(false);
       for (const expected of MULTI_CLASS.expectedHistogramCharts) {
-        await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).not.toBeVisible();
+        await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).toBeHidden();
       }
     });
 
@@ -455,7 +462,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
 
     await test.step('custom visualization link navigates to visualization app', async () => {
       await dataFrameAnalytics.clickExploreInCustomVisualization();
-      await expect(page.testSubj.locator('visualizationLoader')).toBeVisible({ timeout: 15_000 });
+      await visualize.waitForVisualizationLoaded();
     });
   });
 
@@ -464,7 +471,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
   test('regression results view: feature importance, histograms, columns, custom viz', async ({
     page,
     browserAuth,
-    pageObjects: { dataFrameAnalytics },
+    pageObjects: { dataFrameAnalytics, visualize },
   }) => {
     test.setTimeout(10 * 60 * 1000);
 
@@ -499,7 +506,6 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
 
     await test.step('feature importance decision path popover opens after page change', async () => {
       await dataFrameAnalytics.selectResultsTablePage(3);
-      await expect(page.testSubj.locator('mlExplorationDataGrid loaded')).toBeVisible();
       await dataFrameAnalytics.openFeatureImportancePopover();
       await expect(page.testSubj.locator('mlDFAFeatureImportancePopover')).toBeVisible();
       await expect(
@@ -516,12 +522,13 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
         expect(state.chartContainerVisible).toBe(true);
         expect(state.histogramVisible).toBe(expected.chartAvailable);
         expect(state.idText).toBe(expected.id);
+        // Only assert legend when the test data specifies an expected value.
         expect(state.legendText).toBe(expected.legend ?? state.legendText);
       }
 
       await dataFrameAnalytics.toggleHistogramCharts(false);
       for (const expected of REGRESSION.expectedHistogramCharts) {
-        await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).not.toBeVisible();
+        await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).toBeHidden();
       }
     });
 
@@ -534,7 +541,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
 
     await test.step('custom visualization link navigates to visualization app', async () => {
       await dataFrameAnalytics.clickExploreInCustomVisualization();
-      await expect(page.testSubj.locator('visualizationLoader')).toBeVisible({ timeout: 15_000 });
+      await visualize.waitForVisualizationLoaded();
     });
   });
 });

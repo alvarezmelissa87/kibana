@@ -18,9 +18,15 @@
  * depend on the DFA feature which is not yet verified on serverless.
  */
 
+import type { ScoutPage } from '@kbn/scout';
 import { expect } from '@kbn/scout/ui';
 import { test, ML_USERS } from '../fixtures';
-import { createDfaJob, cleanupDfaCloningTest } from '../fixtures/helpers/dfa';
+import {
+  cleanupDfaCloningTest,
+  createDfaJob,
+  deleteDfaJobIfExists,
+  getDfaJobProgress,
+} from '../fixtures/helpers/dfa';
 
 // ── Shared timestamp ensures unique job IDs per test run ─────────────────────
 
@@ -56,10 +62,7 @@ const CLASSIFICATION = {
   expectedDependentVariable: 'y',
   expectedTrainingPercent: '20',
   expectedPredictionFieldName: 'test',
-  // 5 callouts: dep_var_check + training_percent + num_top_classes + analysis_fields_count
-  // (warning: "Classification requires ≥2 fields"; triggered because analyzed_fields.includes=[]
-  // is sent as-is to the validation API, which interprets it as 0 analyzed fields) + analysis_fields
-  expectedValidationCallouts: 5,
+  expectedValidationCallouts: 4,
   expectedRow: {
     type: 'classification',
     status: 'stopped',
@@ -86,9 +89,7 @@ const OUTLIER = {
     model_memory_limit: '5mb',
   },
   expectedJobType: 'outlier_detection',
-  // 2 callouts: analysis_fields_count (warning: "Outlier detection requires ≥1 field";
-  // triggered because analyzed_fields.includes=[] is interpreted as 0 fields) + analysis_fields
-  expectedValidationCallouts: 2,
+  expectedValidationCallouts: 1,
   expectedRow: {
     type: 'outlier_detection',
     status: 'stopped',
@@ -124,14 +125,20 @@ const REGRESSION = {
   expectedDependentVariable: 'stab',
   expectedTrainingPercent: '20',
   expectedPredictionFieldName: 'test',
-  // 4 callouts: dep_var_check + training_percent + analysis_fields_count (same 0-field warning
-  // as classification) + analysis_fields. Regression has no num_top_classes message.
-  expectedValidationCallouts: 4,
+  expectedValidationCallouts: 3,
   expectedRow: {
     type: 'regression',
     status: 'stopped',
     progress: '100',
   },
+};
+
+const assertSourceConfigurationControls = async (page: ScoutPage): Promise<void> => {
+  await expect(page.testSubj.locator('mlAnalyticsCreationDataGrid loaded')).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.testSubj.locator('mlAnalyticsCreateJobWizardIncludesTable')).toBeVisible();
+  await expect(page.testSubj.locator('mlAnalyticsCreateJobWizardIncludesSelect')).toBeVisible();
 };
 
 // ── Spec ──────────────────────────────────────────────────────────────────────
@@ -142,18 +149,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
   let regressionSourceViewId: string | undefined;
 
   test.beforeAll(async ({ esArchiver, apiServices, kbnClient, esClient }) => {
-    // Defensive cleanup: remove any jobs left over from a previously interrupted run
-    // so that createDfaJob does not fail with "resource already exists".
-    await Promise.allSettled([
-      esClient.ml
-        .deleteDataFrameAnalytics({ id: CLASSIFICATION.jobId, force: true })
-        .catch(() => undefined),
-      esClient.ml
-        .deleteDataFrameAnalytics({ id: OUTLIER.jobId, force: true })
-        .catch(() => undefined),
-      esClient.ml
-        .deleteDataFrameAnalytics({ id: REGRESSION.jobId, force: true })
-        .catch(() => undefined),
+    await Promise.all([
+      deleteDfaJobIfExists({ esClient, jobId: CLASSIFICATION.jobId }),
+      deleteDfaJobIfExists({ esClient, jobId: OUTLIER.jobId }),
+      deleteDfaJobIfExists({ esClient, jobId: REGRESSION.jobId }),
     ]);
 
     // Load archives (idempotent)
@@ -192,8 +191,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
   });
 
   test.afterAll(async ({ apiServices, esClient }) => {
-    // Run all three cleanups in parallel; a failure in one must not block the others.
-    await Promise.allSettled([
+    await Promise.all([
       cleanupDfaCloningTest({
         apiServices,
         esClient,
@@ -256,6 +254,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
           `mlAnalyticsCreation-${CLASSIFICATION.expectedJobType}-option selectedJobType`
         )
       ).toBeVisible();
+      await assertSourceConfigurationControls(page);
 
       // Dependent variable and training percent are pre-populated for classification
       await expect(
@@ -318,18 +317,11 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await dataFrameAnalytics.createAndStartJob();
 
       await expect
-        .poll(
-          async () => {
-            const { data_frame_analytics: statsList } =
-              await esClient.ml.getDataFrameAnalyticsStats({
-                id: CLASSIFICATION.cloneJobId,
-                allow_no_match: true,
-              });
-            return statsList[0]?.state;
-          },
-          { timeout: 5 * 60 * 1000, intervals: [5_000] }
-        )
-        .toBe('stopped');
+        .poll(() => getDfaJobProgress({ esClient, jobId: CLASSIFICATION.cloneJobId }), {
+          timeout: 5 * 60 * 1000,
+          intervals: [5_000],
+        })
+        .toStrictEqual({ state: 'stopped', hasTrainingDocs: true });
 
       await dataFrameAnalytics.gotoJobList();
       await dataFrameAnalytics.filterByJobId(CLASSIFICATION.cloneJobId);
@@ -382,6 +374,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
           `mlAnalyticsCreation-${OUTLIER.expectedJobType}-option selectedJobType`
         )
       ).toBeVisible();
+      await assertSourceConfigurationControls(page);
       // Outlier detection has no dependent variable or training percent fields
       await expect(
         page.testSubj.locator('~mlAnalyticsCreateJobWizardDependentVariableSelect')
@@ -427,18 +420,11 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await dataFrameAnalytics.createAndStartJob();
 
       await expect
-        .poll(
-          async () => {
-            const { data_frame_analytics: statsList } =
-              await esClient.ml.getDataFrameAnalyticsStats({
-                id: OUTLIER.cloneJobId,
-                allow_no_match: true,
-              });
-            return statsList[0]?.state;
-          },
-          { timeout: 5 * 60 * 1000, intervals: [5_000] }
-        )
-        .toBe('stopped');
+        .poll(() => getDfaJobProgress({ esClient, jobId: OUTLIER.cloneJobId }), {
+          timeout: 5 * 60 * 1000,
+          intervals: [5_000],
+        })
+        .toStrictEqual({ state: 'stopped', hasTrainingDocs: true });
 
       await dataFrameAnalytics.gotoJobList();
       await dataFrameAnalytics.filterByJobId(OUTLIER.cloneJobId);
@@ -491,6 +477,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
           `mlAnalyticsCreation-${REGRESSION.expectedJobType}-option selectedJobType`
         )
       ).toBeVisible();
+      await assertSourceConfigurationControls(page);
 
       await expect(
         page.testSubj.locator('mlAnalyticsCreateJobWizardDependentVariableSelect loaded')
@@ -550,18 +537,11 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await dataFrameAnalytics.createAndStartJob();
 
       await expect
-        .poll(
-          async () => {
-            const { data_frame_analytics: statsList } =
-              await esClient.ml.getDataFrameAnalyticsStats({
-                id: REGRESSION.cloneJobId,
-                allow_no_match: true,
-              });
-            return statsList[0]?.state;
-          },
-          { timeout: 5 * 60 * 1000, intervals: [5_000] }
-        )
-        .toBe('stopped');
+        .poll(() => getDfaJobProgress({ esClient, jobId: REGRESSION.cloneJobId }), {
+          timeout: 5 * 60 * 1000,
+          intervals: [5_000],
+        })
+        .toStrictEqual({ state: 'stopped', hasTrainingDocs: true });
 
       await dataFrameAnalytics.gotoJobList();
       await dataFrameAnalytics.filterByJobId(REGRESSION.cloneJobId);

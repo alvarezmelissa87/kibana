@@ -42,7 +42,7 @@ const editedDescription = 'Edited description';
 const jobId = `egs_1_${Date.now()}`;
 
 const testData = {
-  jobType: 'regression',
+  jobType: 'regression' as const,
   jobId,
   jobDescription: 'Regression job based on ft_egs_regression dataset with runtime fields',
   source: 'ft_egs_regression',
@@ -406,7 +406,7 @@ test.describe('regression creation', { tag: '@local-stateful-classic' }, () => {
       expect(countResult.count).toBeGreaterThan(0);
 
       // Results view — regression-specific panels
-      await dataFrameAnalytics.openResultsView(testData.jobId);
+      await dataFrameAnalytics.openResultsView(testData.jobId, testData.jobType);
       await expect(page.testSubj.locator('mlDFExpandableSection-RegressionEvaluation')).toBeVisible(
         { timeout: 10_000 }
       );

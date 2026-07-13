@@ -42,7 +42,7 @@ const editedDescription = 'Edited description';
 const jobId = `ihp_1_${Date.now()}`;
 
 const testData = {
-  jobType: 'outlier_detection',
+  jobType: 'outlier_detection' as const,
   jobId,
   jobDescription: 'Outlier detection job based on ft_ihp_outlier dataset with runtime fields',
   source: 'ft_ihp_outlier',
@@ -421,7 +421,7 @@ test.describe('outlier detection creation', { tag: '@local-stateful-classic' }, 
       expect(countResult.count).toBeGreaterThan(0);
 
       // Results view
-      await dataFrameAnalytics.openResultsView(testData.jobId);
+      await dataFrameAnalytics.openResultsView(testData.jobId, testData.jobType);
       await expect(page.testSubj.locator('mlDFExpandableSection-results')).toBeVisible();
       await expect(page.testSubj.locator('mlExplorationDataGrid loaded')).toBeVisible({
         timeout: 10_000,

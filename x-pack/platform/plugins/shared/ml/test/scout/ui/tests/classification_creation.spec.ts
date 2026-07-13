@@ -42,7 +42,7 @@ const editedDescription = 'Edited description';
 const jobId = `bm_1_${Date.now()}`;
 
 const testData = {
-  jobType: 'classification',
+  jobType: 'classification' as const,
   jobId,
   jobDescription:
     "Classification job based on 'ft_bank_marketing' dataset with dependentVariable 'y' and trainingPercent '20'",
@@ -417,7 +417,7 @@ test.describe('classification creation', { tag: '@local-stateful-classic' }, () 
       expect(countResult.count).toBeGreaterThan(0);
 
       // Results view — classification-specific panels
-      await dataFrameAnalytics.openResultsView(testData.jobId);
+      await dataFrameAnalytics.openResultsView(testData.jobId, testData.jobType);
       await expect(
         page.testSubj.locator('mlDFExpandableSection-ClassificationEvaluation')
       ).toBeVisible({ timeout: 10_000 });

@@ -7,6 +7,7 @@
 
 import type { ScoutPage, KibanaUrl } from '@kbn/scout';
 import { EuiComboBoxWrapper, KibanaCodeEditorWrapper } from '@kbn/scout';
+import type { DataFrameAnalysisConfigType } from '@kbn/ml-data-frame-analytics-utils';
 
 /**
  * Page object for the Data Frame Analytics section of Stack Management ML.
@@ -23,9 +24,10 @@ export class DataFrameAnalyticsPage {
   // ── Navigation ────────────────────────────────────────────────────────────
 
   async gotoJobList(): Promise<void> {
-    await this.page.goto(this.kbnUrl.app('management/ml/analytics'));
-    // DataFrameAnalyticsList renders null until its first ML API fetch completes
-    // (isInitialized). 60 s covers cold-start and environments with many existing jobs.
+    await this.page.goto(
+      this.kbnUrl.app('management/ml/analytics?_g=(refreshInterval:(pause:!t,value:30000))')
+    );
+    // List renders null until the first ML API fetch completes; 60 s covers cold-start CI.
     await this.page.testSubj
       .locator('mlAnalyticsJobList')
       .waitFor({ state: 'visible', timeout: 60_000 });
@@ -34,10 +36,8 @@ export class DataFrameAnalyticsPage {
   // ── Creation wizard ───────────────────────────────────────────────────────
 
   /**
-   * Clicks the "Create job" button in the page header and waits for the source
-   * selection page. The header button (mlAnalyticsButtonCreate) is always rendered
-   * regardless of whether the job list is empty or not, making it safe to use in
-   * non-clean CI environments that carry leftover DFA jobs from previous runs.
+   * Uses the always-rendered header button rather than the empty-state one,
+   * so it works in non-clean CI environments that carry leftover DFA jobs.
    */
   async startCreation(): Promise<void> {
     await this.page.testSubj.locator('mlAnalyticsButtonCreate').click();
@@ -45,18 +45,14 @@ export class DataFrameAnalyticsPage {
   }
 
   async selectSource(sourceName: string): Promise<void> {
-    // SavedObjectFinder fires an async fetch on mount; mlDFAPageSourceSelection becoming
-    // visible does not guarantee the item list is populated yet. Wait for the initial load
-    // to settle before typing. EuiBasicTable sets aria-busy="true" on the inner <table>
-    // while loading and removes the attribute when done (it is never set to "false").
+    // EuiBasicTable sets aria-busy="true" while loading and removes it when done;
+    // wait for it to clear before typing so the search fires against a stable list.
     await this.page.testSubj
       .locator('savedObjectsFinderTable')
       .locator('table:not([aria-busy="true"])')
       .waitFor({ state: 'visible', timeout: 40_000 });
     await this.page.testSubj.locator('savedObjectFinderSearchInput').fill(sourceName);
-    // fill() triggers a 300 ms debounced API search. Wait explicitly for the matching
-    // source item rather than relying on the 10 s default action timeout — the search
-    // can be slow in loaded CI environments or when the data view was just created.
+    // fill() triggers a 300 ms debounced API search; wait explicitly for slow CI environments.
     const resultItem = this.page.testSubj.locator(`savedObjectTitle${sourceName}`);
     await resultItem.waitFor({ state: 'visible', timeout: 40_000 });
     await resultItem.click();
@@ -65,7 +61,6 @@ export class DataFrameAnalyticsPage {
 
   async selectJobType(jobType: string): Promise<void> {
     await this.page.testSubj.locator(`mlAnalyticsCreation-${jobType}-option`).click();
-    // Wait for the selected indicator to appear
     await this.page.testSubj
       .locator(`mlAnalyticsCreation-${jobType}-option selectedJobType`)
       .waitFor({ state: 'visible' });
@@ -97,8 +92,7 @@ export class DataFrameAnalyticsPage {
     await this.page.testSubj.locator('mlScatterplotMatrixSampleSizeSelect').selectOption(value);
   }
 
-  // TODO: replace idempotent toggle with explicit click once suite state
-  // is well-understood; see Scout page-object best practices.
+  // TODO: replace idempotent toggle with explicit click once test state is reliable.
   async setScatterplotRandomizeQuery(enable: boolean): Promise<void> {
     const switchEl = this.page.testSubj.locator('mlScatterplotMatrixRandomizeQuerySwitch');
     const isChecked = (await switchEl.getAttribute('aria-checked')) === 'true';
@@ -141,8 +135,7 @@ export class DataFrameAnalyticsPage {
     await this.page.testSubj.locator('mlDFAnalyticsJobCreationJobDescription').fill(desc);
   }
 
-  // TODO: replace idempotent toggle with explicit click once suite state
-  // is well-understood; see Scout page-object best practices.
+  // TODO: replace idempotent toggle with explicit click once test state is reliable.
   async setDestIndexSameAsJobId(sameAsId: boolean): Promise<void> {
     const switchEl = this.page.testSubj.locator('mlCreationWizardUtilsJobIdAsDestIndexNameSwitch');
     const isChecked = (await switchEl.getAttribute('aria-checked')) === 'true';
@@ -201,25 +194,20 @@ export class DataFrameAnalyticsPage {
       .waitFor({ state: 'visible' });
   }
 
-  /**
-   * Creates and immediately starts the job (assumes the "start job" switch is on by default).
-   * Navigates back to the job list after the creation card appears.
-   */
-  // TODO: replace idempotent toggle with explicit click once suite state
-  // is well-understood; see Scout page-object best practices.
+  /** Creates and starts the job, then navigates back to the job list. */
+  // TODO: replace idempotent toggle with explicit click once test state is reliable.
   async createAndStartJob(): Promise<void> {
     const startSwitch = this.page.testSubj.locator('mlAnalyticsCreateJobWizardStartJobSwitch');
     if ((await startSwitch.getAttribute('aria-checked')) !== 'true') {
       await startSwitch.click();
     }
     await this.page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton').click();
-    // The ML backend may be busy; give the post-creation card 30 s to appear.
+    // ML backend may be busy; give the post-creation card 40 s to appear.
     await this.page.testSubj
       .locator('analyticsWizardCardManagement')
       .waitFor({ state: 'visible', timeout: 40_000 });
     await this.page.testSubj.locator('analyticsWizardCardManagement').click();
-    // After navigation the list re-fetches all jobs; 60 s covers slow ML backends and
-    // environments carrying many existing jobs.
+    // List re-fetches after navigation; 60 s covers slow ML backends.
     await this.page.testSubj
       .locator('mlAnalyticsJobList')
       .waitFor({ state: 'visible', timeout: 60_000 });
@@ -231,8 +219,7 @@ export class DataFrameAnalyticsPage {
     await this.page.testSubj
       .locator('~mlAnalyticsTable')
       .waitFor({ state: 'visible', timeout: 60_000 });
-    // "loaded" suffix is set by the component once data rendering completes; 60 s covers
-    // environments with many existing jobs slowing the EUI table render.
+    // "loaded" suffix is set once data renders; 60 s covers environments with many existing jobs.
     await this.page.testSubj
       .locator('mlAnalyticsTable loaded')
       .waitFor({ state: 'visible', timeout: 60_000 });
@@ -257,10 +244,8 @@ export class DataFrameAnalyticsPage {
       .locator(`[data-test-subj~="row-${jobId}"]`);
 
     const getText = async (subj: string) =>
-      // EuiBasicTable appends a hidden tabular-copy-marker <span> (tab char) to every cell for
-      // clipboard support. That span is off-screen (not display:none), so Playwright's innerText()
-      // includes it. Scope to the direct <div> child (EuiTableCellContent) to exclude the marker
-      // without depending on the EUI internal CSS class name.
+      // EuiBasicTable appends a hidden copy-marker <span> that innerText() includes;
+      // scope to the direct div child to exclude it without relying on EUI class names.
       (await row.locator(`[data-test-subj="${subj}"] > div`).innerText()).trim();
 
     return {
@@ -271,7 +256,7 @@ export class DataFrameAnalyticsPage {
       destinationIndex: await getText('mlAnalyticsTableColumnDestIndex'),
       type: await getText('mlAnalyticsTableColumnType'),
       status: await getText('mlAnalyticsTableColumnStatus'),
-      // Progress is a visual EuiProgress bar; read the value attribute (not innerText)
+      // Progress is an EuiProgress bar; read the value attribute, not innerText.
       progress:
         (await row
           .locator('[data-test-subj="mlAnalyticsTableColumnProgress"]')
@@ -281,28 +266,15 @@ export class DataFrameAnalyticsPage {
   }
 
   private async openActionsMenu(jobId: string): Promise<void> {
-    // The analytics table auto-refreshes every 30 s (DEFAULT_REFRESH_INTERVAL_MS).
-    // If a refresh fires between the click and the visibility check the
-    // CollapsedItemActions component unmounts, its local `isOpen` state resets, and
-    // the popover closes.  Mirror the FTR's ensureJobActionsMenuOpen retry strategy:
-    // click → waitFor with short timeout → catch → retry.
+    await this.waitForTableLoaded();
     const actionsButton = this.page.testSubj
       .locator('~mlAnalyticsTable')
       .locator(`[data-test-subj~="row-${jobId}"]`)
       .locator('[data-test-subj="euiCollapsedItemActionsButton"]');
-    const cloneButton = this.page.testSubj.locator('mlAnalyticsJobCloneButton');
 
-    for (let attempt = 0; attempt < 6; attempt++) {
-      await actionsButton.click();
-      try {
-        await cloneButton.waitFor({ state: 'visible', timeout: 5_000 });
-        return;
-      } catch {
-        // Popover likely closed due to a table auto-refresh; retry.
-      }
-    }
-    // Final attempt — if it still fails, the error is descriptive.
-    await cloneButton.waitFor({ state: 'visible', timeout: 5_000 });
+    // The table can re-render while EUI evaluates collapsed actions. Dispatching the
+    // event avoids actionability checks racing that render; the caller waits on its menu item.
+    await actionsButton.dispatchEvent('click');
   }
 
   async openEditFlyout(jobId: string): Promise<void> {
@@ -311,16 +283,9 @@ export class DataFrameAnalyticsPage {
     await this.page.testSubj.locator('mlAnalyticsEditFlyout').waitFor({ state: 'visible' });
   }
 
-  async openResultsView(jobId: string, analysisType: string): Promise<void> {
-    // Navigate directly to the ML app exploration URL rather than clicking the
-    // showOnHover table row button.  The button approach is fragile because:
-    //   1. The button is CSS-hidden until the row is hovered (showOnHover: true).
-    //   2. Clicking it triggers a cross-app navigation (management → ml app) via
-    //      navigateToUrl, which Playwright's locator.waitFor doesn't reliably
-    //      detect when the destination page takes >5 s to mount.
-    // Direct navigation mirrors the URL that the view action constructs via
-    // mlLocator.getUrl (see use_view_action.tsx / formatDataFrameAnalyticsExplorationUrl).
-    // analysisType values: 'classification' | 'regression' | 'outlier_detection'
+  async openResultsView(jobId: string, analysisType: DataFrameAnalysisConfigType): Promise<void> {
+    // Navigate directly rather than clicking the showOnHover table button; the button is
+    // CSS-hidden until hover and its cross-app navigation is unreliable in Playwright.
     const rison = `(ml:(analysisType:${analysisType},jobId:${jobId}))`;
     await this.page.goto(this.kbnUrl.app(`ml/data_frame_analytics/exploration?_g=${rison}`));
     await this.page.testSubj
@@ -343,15 +308,11 @@ export class DataFrameAnalyticsPage {
   // ── Configuration step: dependent variable & training percent ─────────────
 
   async selectDependentVariable(variable: string): Promise<void> {
-    // Wait for options to finish loading before opening the selector.
     await this.page.testSubj
       .locator('mlAnalyticsCreateJobWizardDependentVariableSelect loaded')
       .waitFor({ state: 'visible' });
-    // The dependent variable selector is an OptionsListPopover (EuiSelectable), not a standard
-    // EUI ComboBox.  Opening it by clicking comboBoxInput reveals an optionsListFilterInput
-    // (the EuiSelectable built-in search) and individual options keyed by
-    // data-test-subj="optionsListControlSelection-{field}".  Typing into optionsListFilterInput
-    // filters the list; clicking the matching row commits the selection and closes the popover.
+    // This is an OptionsListPopover (EuiSelectable), not a standard ComboBox:
+    // click comboBoxInput to open, type in optionsListFilterInput to filter, click to commit.
     await this.page.testSubj
       .locator('~mlAnalyticsCreateJobWizardDependentVariableSelect')
       .locator('[data-test-subj="comboBoxInput"]')
@@ -398,11 +359,7 @@ export class DataFrameAnalyticsPage {
 
   // ── Field-stats flyout ────────────────────────────────────────────────────
 
-  /**
-   * Opens the field-stats flyout for a field available in the dependent-variable
-   * combo box drop-down. Waits for options to be loaded before clicking the
-   * inspect button so the trigger is reliably present.
-   */
+  /** Opens the field-stats flyout from the dependent-variable combo box. */
   async openFieldStatsFlyoutFromDependentVariableInput(fieldName: string): Promise<void> {
     await this.page.testSubj
       .locator('mlAnalyticsCreateJobWizardDependentVariableSelect loaded')
@@ -415,17 +372,12 @@ export class DataFrameAnalyticsPage {
     await inspectBtn.waitFor({ state: 'visible' });
     await inspectBtn.click();
     await this.page.testSubj.locator('mlFieldStatsFlyout').waitFor({ state: 'visible' });
-    // The combo box dropdown was opened to access the inspect button and is still open.
-    // Press Escape to close it so subsequent selectDependentVariable() calls start from a
-    // clean state. Escape dismisses the EUI ComboBox dropdown but does not close the push
-    // flyout (which ignores Escape by design).
+    // Close the dropdown left open by the inspect-button click; Escape dismisses EUI
+    // ComboBox without closing the push flyout (which ignores Escape by design).
     await this.page.keyboard.press('Escape');
   }
 
-  /**
-   * Opens the field-stats flyout for a field in the include-fields table.
-   * Mirrors the outlier spec's selector pattern.
-   */
+  /** Opens the field-stats flyout from the include-fields table. */
   async openFieldStatsFlyoutFromIncludeFields(fieldName: string): Promise<void> {
     await this.page.testSubj
       .locator('mlAnalyticsCreateJobWizardIncludesSelect')
@@ -438,7 +390,7 @@ export class DataFrameAnalyticsPage {
     await this.page.testSubj.locator('mlFieldStatsFlyout').waitFor({ state: 'visible' });
   }
 
-  /** Closes the field-stats flyout via its footer button and waits for it to be hidden. */
+  /** Closes the field-stats flyout and waits for it to hide. */
   async closeFieldStatsFlyout(): Promise<void> {
     await this.page.testSubj.locator('mlFieldStatsFlyoutCloseButton').click();
     await this.page.testSubj.locator('mlFieldStatsFlyout').waitFor({ state: 'hidden' });
@@ -465,11 +417,7 @@ export class DataFrameAnalyticsPage {
 
   // ── Clone flow ────────────────────────────────────────────────────────────
 
-  /**
-   * Opens the actions menu for the given job and clicks Clone, then waits for
-   * the creation wizard to be visible. Hides the multi-step open-menu sequence
-   * that would otherwise repeat across each clone test.
-   */
+  /** Opens the actions menu for the given job, clicks Clone, and waits for the creation wizard. */
   async cloneJob(jobId: string): Promise<void> {
     await this.openActionsMenu(jobId);
     await this.page.testSubj.locator('mlAnalyticsJobCloneButton').click();
@@ -479,58 +427,69 @@ export class DataFrameAnalyticsPage {
   // ── Results view ──────────────────────────────────────────────────────────
 
   /**
-   * Opens the feature importance popover for the first feature-importance cell
-   * in the exploration data grid. Uses hover to reveal the cell action button,
-   * then clicks it and waits for the popover to appear.
+   * Hovers the first feature-importance cell and clicks its action button to open
+   * the popover.
    *
-   * Identifies the cell by data-gridcell-column-id containing "feature_importance"
-   * (a stable EUI DataGrid attribute) rather than a CSS class name.
-   *
-   * The exploration page layout places the Results data grid below the
-   * EvaluatePanel and FeatureImportanceSummaryPanel sections. After
-   * expandFeatureImportanceSection() scrolls the page to the summary section,
-   * the Results grid (regression in particular) may be partially off-screen.
-   * In headless Playwright, EUI DataGrid's VariableSizeGrid can render no cells
-   * when its container reports a zero width. Scrolling the wrapper back into the
-   * viewport first allows the ResizeObserver to recompute the width and render
-   * the cells. We then wait directly for the feature importance cell to become
-   * visible rather than using an intermediate sentinel, which avoids selector
-   * fragility with EUI's internal data-gridcell-column-index attribute.
+   * Two headless Playwright / EUI DataGrid quirks require special handling:
+   * 1. EUI DataGrid's VariableSizeGrid renders no cells when its container reports
+   *    zero width. Scrolling the grid into view fixes this — but only when the scroll
+   *    actually moves the page. After pagination the page may still be showing the
+   *    grid, making scrollIntoViewIfNeeded a no-op. Scrolling to the page bottom first
+   *    guarantees the grid leaves the viewport regardless of evaluate-panel height,
+   *    so the return scroll always triggers EUI's ResizeObserver.
+   * 2. data-gridcell-row-index is the absolute ES row offset, not a page-local index.
+   *    Page 3 (pageIndex=2, pageSize=25) starts at row 50, so hard-coding row 0 would
+   *    never match after pagination. waitForFunction reads row and column ids from the
+   *    first rendered FI cell for a unique data-* selector without .first()/.nth().
    */
   async openFeatureImportancePopover(): Promise<void> {
     const dataGrid = this.page.testSubj.locator('mlExplorationDataGrid loaded');
 
-    // Bring the grid into the viewport. For regression, the evaluate panel is
-    // shorter than for classification, so the results grid scrolls further off-
-    // screen after expandFeatureImportanceSection(). Without this step the EUI
-    // VariableSizeGrid sees finalWidth=0 and renders no cells.
+    // Scroll to the page bottom so the grid leaves the viewport, then bring it back.
+    // scrollTo(bottom) works for any evaluate-panel height; scrollTo(0) can leave the
+    // grid on-screen when the panel is short, making scrollIntoViewIfNeeded a no-op.
+    await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await dataGrid.scrollIntoViewIfNeeded();
 
-    // data-gridcell-column-id is set by EUI DataGrid to the column's id string.
-    // All feature-importance columns contain "feature_importance" in their id
-    // (e.g. "ml.feature_importance", "ml_central_air.feature_importance").
-    // Row index 0 targets the first data row (header cells carry row index -1).
-    // We wait up to 20 s to accommodate the two-step EUI render cycle: first
-    // VariableSizeGrid mounts (finalWidth > 0), then rows appear once the header
-    // resize observer fires (headerRowHeight > 0).
-    const featureImportanceCell = this.page.locator(
-      '[data-gridcell-row-index="0"][data-gridcell-column-id*="feature_importance"]'
+    // Wait for any FI cell and capture exact row + column ids so the locator is unique
+    // even when multiple feature_importance columns exist on the same row.
+    const cellInfoHandle = await this.page.waitForFunction(
+      () => {
+        const el = document.querySelector(
+          '[data-test-subj="mlExplorationDataGrid loaded"] ' +
+            '[data-gridcell-column-id*="feature_importance"][data-test-subj="dataGridRowCell"]'
+        );
+        if (!el) {
+          return null;
+        }
+        const rowIndex = el.getAttribute('data-gridcell-row-index');
+        const columnId = el.getAttribute('data-gridcell-column-id');
+        if (rowIndex == null || columnId == null) {
+          return null;
+        }
+        return { rowIndex, columnId };
+      },
+      undefined,
+      { timeout: 30_000 }
     );
-    await featureImportanceCell.waitFor({ state: 'visible', timeout: 20_000 });
+    const { rowIndex, columnId } = (await cellInfoHandle.jsonValue()) as {
+      rowIndex: string;
+      columnId: string;
+    };
+
+    const featureImportanceCell = dataGrid.locator(
+      `[data-gridcell-row-index="${rowIndex}"][data-gridcell-column-id="${columnId}"][data-test-subj="dataGridRowCell"]`
+    );
+    await featureImportanceCell.waitFor({ state: 'visible' });
     await featureImportanceCell.scrollIntoViewIfNeeded();
     await featureImportanceCell.hover();
-    // Hover reveals a single interaction button inside the cell.
     const button = featureImportanceCell.locator('button');
     await button.waitFor({ state: 'visible' });
     await button.click();
     await this.page.testSubj.locator('mlDFAFeatureImportancePopover').waitFor({ state: 'visible' });
   }
 
-  /**
-   * Expands the "Feature Importance Summary" section if it is collapsed, then
-   * waits for the content to be visible. Extracted from specs to avoid
-   * repeating the same conditional-toggle sequence across multiple tests.
-   */
+  /** Expands the Feature Importance Summary section if collapsed. */
   async expandFeatureImportanceSection(): Promise<void> {
     await this.page.testSubj
       .locator('mlDFExpandableSection-FeatureImportanceSummary')
@@ -548,22 +507,37 @@ export class DataFrameAnalyticsPage {
 
   /**
    * Clicks the pagination button for page {@link pageNum} (1-based) on the
-   * exploration data grid and waits for the grid to reload.
+   * exploration data grid and waits for the new page's rows to render.
+   *
+   * `mlExplorationDataGrid loaded` stays on the wrapper during refetch, so waiting
+   * for that locator alone is a no-op. Wait for the active page indicator and for
+   * cells whose absolute row index matches the new page (default pageSize is 25).
    */
   async selectResultsTablePage(pageNum: number): Promise<void> {
-    // EUI pagination uses a 0-based index in the data-test-subj.
-    // Chain two locator calls: first scope to the grid, then find the button.
-    await this.page.testSubj
-      .locator('mlExplorationDataGrid loaded')
-      .locator(`[data-test-subj="pagination-button-${pageNum - 1}"]`)
-      .click();
-    await this.page.testSubj.locator('mlExplorationDataGrid loaded').waitFor({ state: 'visible' });
+    // EUI pagination uses 0-based index in data-test-subj (pageNum is 1-based).
+    const grid = this.page.testSubj.locator('mlExplorationDataGrid loaded');
+    const pageButtonIndex = pageNum - 1;
+    await grid.locator(`[data-test-subj="pagination-button-${pageButtonIndex}"]`).click();
+    await grid
+      .locator(`[data-test-subj="pagination-button-${pageButtonIndex}"][aria-current="page"]`)
+      .waitFor({ state: 'visible' });
+
+    // Default exploration pageSize is 25 (see use_exploration_url_state).
+    const minRowIndex = String(pageButtonIndex * 25);
+    await this.page.waitForFunction(
+      (minIdx) => {
+        const cell = document.querySelector(
+          '[data-test-subj="mlExplorationDataGrid loaded"] [data-test-subj="dataGridRowCell"]'
+        );
+        const row = cell?.getAttribute('data-gridcell-row-index');
+        return row != null && Number(row) >= Number(minIdx);
+      },
+      minRowIndex,
+      { timeout: 30_000 }
+    );
   }
 
-  /**
-   * Toggles the histogram chart preview on or off. Reads the current
-   * aria-pressed state to avoid a redundant click.
-   */
+  /** Toggles histogram chart preview; reads aria-pressed to avoid a redundant click. */
   async toggleHistogramCharts(enable: boolean): Promise<void> {
     const button = this.page.testSubj.locator('mlExplorationDataGridHistogramButton');
     const isPressed = (await button.getAttribute('aria-pressed')) === 'true';
@@ -572,11 +546,7 @@ export class DataFrameAnalyticsPage {
     }
   }
 
-  /**
-   * Returns the observable state for the per-column histogram chart container
-   * so the spec can assert chartContainerVisible, histogramVisible, id text,
-   * and optional legend text without duplicating brittle selector sequences.
-   */
+  /** Returns histogram chart state (visibility, id, legend) for the given column. */
   async getHistogramChartState(columnId: string): Promise<{
     chartContainerVisible: boolean;
     histogramVisible: boolean;
@@ -606,37 +576,26 @@ export class DataFrameAnalyticsPage {
     return { chartContainerVisible, histogramVisible, idText, legendText };
   }
 
-  /**
-   * Opens the EUI DataGrid column sort popover, adds {@link columnId} as a
-   * sort key with the given direction, then closes the popover.
-   */
+  /** Adds a sort key for the given column via the DataGrid sort popover. */
   async setSortColumn(columnId: string, direction: 'asc' | 'desc'): Promise<void> {
-    // Open the sort popover via the grid's toolbar button
     await this.page.testSubj
       .locator('mlExplorationDataGrid loaded')
       .locator('[data-test-subj="dataGridColumnSortingButton"]')
       .click();
-    // "Pick fields to sort by" button opens the column selection list
     await this.page.testSubj
       .locator('dataGridColumnSortingSelectionButton')
       .waitFor({ state: 'visible' });
     await this.page.testSubj.locator('dataGridColumnSortingSelectionButton').click();
-    // Select the column to sort by
     await this.page.testSubj
       .locator(`dataGridColumnSortingPopoverColumnSelection-${columnId}`)
       .click();
-    // Click the desired direction
     await this.page.testSubj
       .locator(`euiDataGridColumnSorting-sortColumn-${columnId}-${direction}`)
       .click();
-    // Close the popover
     await this.page.keyboard.press('Escape');
   }
 
-  /**
-   * Opens the EUI DataGrid column selector and clicks "Show all", then closes
-   * the panel.
-   */
+  /** Shows all columns via the DataGrid column selector. */
   async showAllColumns(): Promise<void> {
     await this.page.testSubj
       .locator('mlExplorationDataGrid loaded')
@@ -646,10 +605,7 @@ export class DataFrameAnalyticsPage {
     await this.page.keyboard.press('Escape');
   }
 
-  /**
-   * Opens the EUI DataGrid column selector and clicks "Hide all", then closes
-   * the panel.
-   */
+  /** Hides all columns via the DataGrid column selector. */
   async hideAllColumns(): Promise<void> {
     await this.page.testSubj
       .locator('mlExplorationDataGrid loaded')
@@ -660,12 +616,14 @@ export class DataFrameAnalyticsPage {
   }
 
   /**
-   * Clicks the "Explore in custom visualization" link in the scatterplot matrix
-   * section. The caller must assert that `visualizationLoader` is visible after
-   * this call (navigation occurs; no return is needed).
+   * Clicks the "Explore in custom visualization" link and waits for the browser to
+   * navigate to the Visualize app URL. The navigation is triggered by an async
+   * onClick handler, so waitForURL is required — Playwright's click() returns as
+   * soon as the event fires, not after the async navigateToApp call completes.
    */
   async clickExploreInCustomVisualization(): Promise<void> {
     await this.page.testSubj.locator('mlSplomExploreInCustomVisualizationLink').click();
+    await this.page.waitForURL(/visualize/, { timeout: 30_000 });
   }
 
   // ── Custom URLs tab ───────────────────────────────────────────────────────
@@ -692,17 +650,14 @@ export class DataFrameAnalyticsPage {
     await this.openCustomUrlEditor();
     await this.page.testSubj.locator('mlJobCustomUrlLabelInput').fill(config.label);
     await this.selectRadioOption('mlJobCustomUrlLinkToTypeInput', 'KIBANA_DISCOVER');
-    // EuiSelect — select by visible label text
     await this.page.testSubj
       .locator('mlJobCustomUrlDiscoverIndexPatternInput')
       .selectOption({ label: config.indexName });
-    // Query entities combobox
     if (config.queryEntityFieldNames.length > 0) {
       const entitiesCombo = new EuiComboBoxWrapper(this.page, 'mlJobCustomUrlQueryEntitiesInput');
       await entitiesCombo.selectMultiOptions(config.queryEntityFieldNames);
     }
     await this.page.testSubj.locator('mlJobAddCustomUrl').click();
-    // Wait for the form editor to close, indicating the URL was added to the list
     await this.page.testSubj.locator('mlJobCustomUrlForm').waitFor({ state: 'hidden' });
   }
 
@@ -714,17 +669,15 @@ export class DataFrameAnalyticsPage {
     await this.openCustomUrlEditor();
     await this.page.testSubj.locator('mlJobCustomUrlLabelInput').fill(config.label);
     await this.selectRadioOption('mlJobCustomUrlLinkToTypeInput', 'KIBANA_DASHBOARD');
-    // Dashboard selector is an EuiSelect (native <select>), not a ComboBox
+    // Dashboard selector is a native <select> (EuiSelect), not a ComboBox.
     await this.page.testSubj
       .locator('mlJobCustomUrlDashboardNameInput')
       .selectOption({ label: config.dashboardName });
-    // Query entities combobox
     if (config.queryEntityFieldNames.length > 0) {
       const entitiesCombo = new EuiComboBoxWrapper(this.page, 'mlJobCustomUrlQueryEntitiesInput');
       await entitiesCombo.selectMultiOptions(config.queryEntityFieldNames);
     }
     await this.page.testSubj.locator('mlJobAddCustomUrl').click();
-    // Wait for the form editor to close, indicating the URL was added to the list
     await this.page.testSubj.locator('mlJobCustomUrlForm').waitFor({ state: 'hidden' });
   }
 
@@ -734,7 +687,6 @@ export class DataFrameAnalyticsPage {
     await this.selectRadioOption('mlJobCustomUrlLinkToTypeInput', 'OTHER');
     await this.page.testSubj.locator('mlJobCustomUrlOtherTypeUrlInput').fill(config.url);
     await this.page.testSubj.locator('mlJobAddCustomUrl').click();
-    // Wait for the form editor to close, indicating the URL was added to the list
     await this.page.testSubj.locator('mlJobCustomUrlForm').waitFor({ state: 'hidden' });
   }
 }
