@@ -25,8 +25,36 @@ import { createAndRunDfaJob, cleanupDfaResultsTest } from '../fixtures/helpers/d
 interface ExpectedHistogramChart {
   chartAvailable: boolean;
   id: string;
+  /** Exact legend text — only for unsupported charts that render a fixed message. */
   legend?: string;
 }
+
+interface HistogramChartState {
+  chartContainerVisible: boolean;
+  histogramVisible: boolean;
+  idText: string;
+  legendText: string;
+}
+
+/**
+ * Asserts histogram UI behavior: availability, column id, and that available charts
+ * render a non-empty legend. Exact legend strings are only checked when the fixture
+ * provides one (unsupported-chart messages), not for data-dependent ranges.
+ */
+const assertHistogramChartState = (
+  state: HistogramChartState,
+  expected: ExpectedHistogramChart
+): void => {
+  expect(state.chartContainerVisible).toBe(true);
+  expect(state.histogramVisible).toBe(expected.chartAvailable);
+  expect(state.idText).toBe(expected.id);
+
+  if (expected.chartAvailable) {
+    expect(state.legendText.length).toBeGreaterThan(0);
+  } else if (expected.legend !== undefined) {
+    expect(state.legendText).toBe(expected.legend);
+  }
+};
 
 // ── Shared timestamp ensures unique job IDs per test run ─────────────────────
 
@@ -182,11 +210,11 @@ const REGRESSION = {
   expectedHistogramCharts: [
     { chartAvailable: true, id: 'ml.is_training' },
     { chartAvailable: true, id: 'ml.test' },
-    { chartAvailable: true, id: 'stab', legend: '-0.06 - 0.11' },
-    { chartAvailable: true, id: 'g1', legend: '0.05 - 1' },
-    { chartAvailable: true, id: 'g2', legend: '0.05 - 1' },
-    { chartAvailable: true, id: 'g3', legend: '0.05 - 1' },
-    { chartAvailable: true, id: 'g4', legend: '0.05 - 1' },
+    { chartAvailable: true, id: 'stab' },
+    { chartAvailable: true, id: 'g1' },
+    { chartAvailable: true, id: 'g2' },
+    { chartAvailable: true, id: 'g3' },
+    { chartAvailable: true, id: 'g4' },
   ] as ExpectedHistogramChart[],
 };
 
@@ -352,11 +380,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
       await dataFrameAnalytics.toggleHistogramCharts(true);
       for (const expected of BINARY_CLASSIFICATION.expectedHistogramCharts) {
         const state = await dataFrameAnalytics.getHistogramChartState(expected.id);
-        expect(state.chartContainerVisible).toBe(true);
-        expect(state.histogramVisible).toBe(expected.chartAvailable);
-        expect(state.idText).toBe(expected.id);
-        // Only assert legend when the test data specifies an expected value.
-        expect(state.legendText).toBe(expected.legend ?? state.legendText);
+        assertHistogramChartState(state, expected);
       }
 
       await dataFrameAnalytics.toggleHistogramCharts(false);
@@ -437,11 +461,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
       await dataFrameAnalytics.toggleHistogramCharts(true);
       for (const expected of MULTI_CLASS.expectedHistogramCharts) {
         const state = await dataFrameAnalytics.getHistogramChartState(expected.id);
-        expect(state.chartContainerVisible).toBe(true);
-        expect(state.histogramVisible).toBe(expected.chartAvailable);
-        expect(state.idText).toBe(expected.id);
-        // Only assert legend when the test data specifies an expected value.
-        expect(state.legendText).toBe(expected.legend ?? state.legendText);
+        assertHistogramChartState(state, expected);
       }
 
       await dataFrameAnalytics.toggleHistogramCharts(false);
@@ -519,11 +539,7 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
       await dataFrameAnalytics.toggleHistogramCharts(true);
       for (const expected of REGRESSION.expectedHistogramCharts) {
         const state = await dataFrameAnalytics.getHistogramChartState(expected.id);
-        expect(state.chartContainerVisible).toBe(true);
-        expect(state.histogramVisible).toBe(expected.chartAvailable);
-        expect(state.idText).toBe(expected.id);
-        // Only assert legend when the test data specifies an expected value.
-        expect(state.legendText).toBe(expected.legend ?? state.legendText);
+        assertHistogramChartState(state, expected);
       }
 
       await dataFrameAnalytics.toggleHistogramCharts(false);

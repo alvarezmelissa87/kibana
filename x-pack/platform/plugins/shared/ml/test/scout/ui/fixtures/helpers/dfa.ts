@@ -200,7 +200,8 @@ export const cleanupDfaCloningTest = async ({
 };
 
 /**
- * Targeted cleanup for a DFA results view test.
+ * Targeted cleanup for a DFA results view test. Expected absences (e.g. job 404)
+ * are tolerated via helpers; unexpected failures are surfaced as AggregateError.
  */
 export const cleanupDfaResultsTest = async ({
   apiServices,
@@ -217,18 +218,19 @@ export const cleanupDfaResultsTest = async ({
   destDataViewId: string | undefined;
   destIndex: string;
 }): Promise<void> => {
-  await esClient.ml.deleteDataFrameAnalytics({ id: jobId, force: true }).catch(() => undefined);
+  const results = await Promise.allSettled([
+    deleteDfaJobIfExists({ esClient, jobId }),
+    sourceDataViewId ? apiServices.dataViews.delete(sourceDataViewId) : Promise.resolve(),
+    destDataViewId ? apiServices.dataViews.delete(destDataViewId) : Promise.resolve(),
+    esClient.indices.delete({ index: destIndex, ignore_unavailable: true }),
+  ]);
+  const failures = results
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map(({ reason }) => reason);
 
-  if (sourceDataViewId) {
-    await apiServices.dataViews.delete(sourceDataViewId).catch(() => undefined);
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Failed to clean up DFA results test resources');
   }
-  if (destDataViewId) {
-    await apiServices.dataViews.delete(destDataViewId).catch(() => undefined);
-  }
-
-  await esClient.indices
-    .delete({ index: destIndex, ignore_unavailable: true })
-    .catch(() => undefined);
 };
 
 // ── Original global helper (kept for existing specs) ─────────────────────────
