@@ -20,7 +20,7 @@
 
 import { expect } from '@kbn/scout/ui';
 import { test, ML_USERS } from '../fixtures';
-import { createAndRunDfaJob, cleanupDfaResultsTest } from '../fixtures/helpers/dfa';
+import { cleanupDfaResultsTest } from '../fixtures/helpers/dfa';
 
 interface ExpectedHistogramChart {
   chartAvailable: boolean;
@@ -227,19 +227,13 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
   let multiDestViewId: string | undefined;
   let regressionDestViewId: string | undefined;
 
-  test.beforeAll(async ({ esArchiver, apiServices, kbnClient, esClient }) => {
+  test.beforeAll(async ({ esArchiver, apiServices }) => {
     // Defensive cleanup: remove any jobs left over from a previously interrupted run
-    // so that createAndRunDfaJob does not fail with "resource already exists".
+    // so that createAndRun does not fail with "resource already exists".
     await Promise.allSettled([
-      esClient.ml
-        .deleteDataFrameAnalytics({ id: BINARY_CLASSIFICATION.jobId, force: true })
-        .catch(() => undefined),
-      esClient.ml
-        .deleteDataFrameAnalytics({ id: MULTI_CLASS.jobId, force: true })
-        .catch(() => undefined),
-      esClient.ml
-        .deleteDataFrameAnalytics({ id: REGRESSION.jobId, force: true })
-        .catch(() => undefined),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(BINARY_CLASSIFICATION.jobId),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(MULTI_CLASS.jobId),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(REGRESSION.jobId),
     ]);
 
     // Load archives (idempotent; ihp_outlier is shared by binary and multi-class)
@@ -265,9 +259,9 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
 
     // Create and run all three jobs concurrently
     await Promise.all([
-      createAndRunDfaJob({ kbnClient, esClient, jobConfig: BINARY_CLASSIFICATION.jobConfig }),
-      createAndRunDfaJob({ kbnClient, esClient, jobConfig: MULTI_CLASS.jobConfig }),
-      createAndRunDfaJob({ kbnClient, esClient, jobConfig: REGRESSION.jobConfig }),
+      apiServices.ml.dataFrameAnalytics.createAndRun(BINARY_CLASSIFICATION.jobConfig),
+      apiServices.ml.dataFrameAnalytics.createAndRun(MULTI_CLASS.jobConfig),
+      apiServices.ml.dataFrameAnalytics.createAndRun(REGRESSION.jobConfig),
     ]);
 
     // Create dest data views after jobs finish so index mapping is available

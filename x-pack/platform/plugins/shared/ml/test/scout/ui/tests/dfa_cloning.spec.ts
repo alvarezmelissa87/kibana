@@ -21,12 +21,7 @@
 import type { ScoutPage } from '@kbn/scout';
 import { expect } from '@kbn/scout/ui';
 import { test, ML_USERS } from '../fixtures';
-import {
-  cleanupDfaCloningTest,
-  createDfaJob,
-  deleteDfaJobIfExists,
-  getDfaJobProgress,
-} from '../fixtures/helpers/dfa';
+import { cleanupDfaCloningTest } from '../fixtures/helpers/dfa';
 
 // ── Shared timestamp ensures unique job IDs per test run ─────────────────────
 
@@ -148,11 +143,11 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
   let outlierSourceViewId: string | undefined;
   let regressionSourceViewId: string | undefined;
 
-  test.beforeAll(async ({ esArchiver, apiServices, kbnClient, esClient }) => {
+  test.beforeAll(async ({ esArchiver, apiServices }) => {
     await Promise.all([
-      deleteDfaJobIfExists({ esClient, jobId: CLASSIFICATION.jobId }),
-      deleteDfaJobIfExists({ esClient, jobId: OUTLIER.jobId }),
-      deleteDfaJobIfExists({ esClient, jobId: REGRESSION.jobId }),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(CLASSIFICATION.jobId),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(OUTLIER.jobId),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(REGRESSION.jobId),
     ]);
 
     // Load archives (idempotent)
@@ -184,9 +179,9 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
 
     // Create the original jobs (NOT started; they just need to exist in the table)
     await Promise.all([
-      createDfaJob({ kbnClient, jobConfig: CLASSIFICATION.jobConfig }),
-      createDfaJob({ kbnClient, jobConfig: OUTLIER.jobConfig }),
-      createDfaJob({ kbnClient, jobConfig: REGRESSION.jobConfig }),
+      apiServices.ml.dataFrameAnalytics.createViaKibana(CLASSIFICATION.jobConfig),
+      apiServices.ml.dataFrameAnalytics.createViaKibana(OUTLIER.jobConfig),
+      apiServices.ml.dataFrameAnalytics.createViaKibana(REGRESSION.jobConfig),
     ]);
   });
 
@@ -228,7 +223,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     page,
     browserAuth,
     pageObjects: { dataFrameAnalytics },
-    esClient,
+    apiServices,
   }) => {
     test.setTimeout(15 * 60 * 1000);
 
@@ -317,7 +312,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await dataFrameAnalytics.createAndStartJob();
 
       await expect
-        .poll(() => getDfaJobProgress({ esClient, jobId: CLASSIFICATION.cloneJobId }), {
+        .poll(() => apiServices.ml.dataFrameAnalytics.getStats(CLASSIFICATION.cloneJobId), {
           timeout: 5 * 60 * 1000,
           intervals: [5_000],
         })
@@ -349,7 +344,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     page,
     browserAuth,
     pageObjects: { dataFrameAnalytics },
-    esClient,
+    apiServices,
   }) => {
     test.setTimeout(15 * 60 * 1000);
 
@@ -420,7 +415,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await dataFrameAnalytics.createAndStartJob();
 
       await expect
-        .poll(() => getDfaJobProgress({ esClient, jobId: OUTLIER.cloneJobId }), {
+        .poll(() => apiServices.ml.dataFrameAnalytics.getStats(OUTLIER.cloneJobId), {
           timeout: 5 * 60 * 1000,
           intervals: [5_000],
         })
@@ -452,7 +447,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     page,
     browserAuth,
     pageObjects: { dataFrameAnalytics },
-    esClient,
+    apiServices,
   }) => {
     test.setTimeout(15 * 60 * 1000);
 
@@ -537,7 +532,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await dataFrameAnalytics.createAndStartJob();
 
       await expect
-        .poll(() => getDfaJobProgress({ esClient, jobId: REGRESSION.cloneJobId }), {
+        .poll(() => apiServices.ml.dataFrameAnalytics.getStats(REGRESSION.cloneJobId), {
           timeout: 5 * 60 * 1000,
           intervals: [5_000],
         })
