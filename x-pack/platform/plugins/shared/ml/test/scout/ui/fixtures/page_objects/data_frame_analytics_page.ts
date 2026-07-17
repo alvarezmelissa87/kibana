@@ -6,8 +6,8 @@
  */
 
 import type { ScoutPage, KibanaUrl } from '@kbn/scout';
-import { EuiComboBoxWrapper, KibanaCodeEditorWrapper } from '@kbn/scout';
 import type { DataFrameAnalysisConfigType } from '@kbn/ml-data-frame-analytics-utils';
+import { KibanaCodeEditorWrapper } from '@kbn/scout';
 
 /**
  * Page object for the Data Frame Analytics section of Stack Management ML.
@@ -654,8 +654,9 @@ export class DataFrameAnalyticsPage {
       .locator('mlJobCustomUrlDiscoverIndexPatternInput')
       .selectOption({ label: config.indexName });
     if (config.queryEntityFieldNames.length > 0) {
-      const entitiesCombo = new EuiComboBoxWrapper(this.page, 'mlJobCustomUrlQueryEntitiesInput');
-      await entitiesCombo.selectMultiOptions(config.queryEntityFieldNames);
+      await this.page.components
+        .comboBox('mlJobCustomUrlQueryEntitiesInput')
+        .setSelectedOptions(config.queryEntityFieldNames);
     }
     await this.page.testSubj.locator('mlJobAddCustomUrl').click();
     await this.page.testSubj.locator('mlJobCustomUrlForm').waitFor({ state: 'hidden' });
@@ -674,8 +675,9 @@ export class DataFrameAnalyticsPage {
       .locator('mlJobCustomUrlDashboardNameInput')
       .selectOption({ label: config.dashboardName });
     if (config.queryEntityFieldNames.length > 0) {
-      const entitiesCombo = new EuiComboBoxWrapper(this.page, 'mlJobCustomUrlQueryEntitiesInput');
-      await entitiesCombo.selectMultiOptions(config.queryEntityFieldNames);
+      await this.page.components
+        .comboBox('mlJobCustomUrlQueryEntitiesInput')
+        .setSelectedOptions(config.queryEntityFieldNames);
     }
     await this.page.testSubj.locator('mlJobAddCustomUrl').click();
     await this.page.testSubj.locator('mlJobCustomUrlForm').waitFor({ state: 'hidden' });
