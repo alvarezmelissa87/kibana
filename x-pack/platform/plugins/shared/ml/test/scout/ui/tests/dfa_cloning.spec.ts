@@ -136,6 +136,19 @@ const assertSourceConfigurationControls = async (page: ScoutPage): Promise<void>
   await expect(page.testSubj.locator('mlAnalyticsCreateJobWizardIncludesSelect')).toBeVisible();
 };
 
+/**
+ * Counts root validation callouts only because EUI also stamps `data-test-subj` onto
+ * child `__content` nodes
+ */
+const assertValidationCalloutCount = async (
+  page: ScoutPage,
+  expectedCount: number
+): Promise<void> => {
+  const validationCallouts = page.locator('.euiCallOut[data-test-subj~="mlValidationCallout"]');
+  await expect(validationCallouts).not.toHaveCount(0);
+  await expect(validationCallouts).toHaveCount(expectedCount);
+};
+
 // ── Spec ──────────────────────────────────────────────────────────────────────
 
 test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
@@ -297,15 +310,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     });
 
     await test.step('validates and creates the clone job', async () => {
-      await expect(page.testSubj.locator('~mlValidationCallout')).not.toHaveCount(0);
-      await expect(page.testSubj.locator('~mlValidationCallout')).toHaveCount(
-        CLASSIFICATION.expectedValidationCallouts
-      );
+      await assertValidationCalloutCount(page, CLASSIFICATION.expectedValidationCallouts);
 
       await dataFrameAnalytics.continueToCreate();
-      await expect(
-        page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')
-      ).not.toBeDisabled();
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')).toBeEnabled();
     });
 
     await test.step('runs the clone job and verifies it in the job list', async () => {
@@ -373,7 +381,7 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       // Outlier detection has no dependent variable or training percent fields
       await expect(
         page.testSubj.locator('~mlAnalyticsCreateJobWizardDependentVariableSelect')
-      ).not.toBeVisible();
+      ).toBeHidden();
 
       await dataFrameAnalytics.continueToAdditionalOptions();
     });
@@ -400,15 +408,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     });
 
     await test.step('validates and creates the clone job', async () => {
-      await expect(page.testSubj.locator('~mlValidationCallout')).not.toHaveCount(0);
-      await expect(page.testSubj.locator('~mlValidationCallout')).toHaveCount(
-        OUTLIER.expectedValidationCallouts
-      );
+      await assertValidationCalloutCount(page, OUTLIER.expectedValidationCallouts);
 
       await dataFrameAnalytics.continueToCreate();
-      await expect(
-        page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')
-      ).not.toBeDisabled();
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')).toBeEnabled();
     });
 
     await test.step('runs the clone job and verifies it in the job list', async () => {
@@ -517,15 +520,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     });
 
     await test.step('validates and creates the clone job', async () => {
-      await expect(page.testSubj.locator('~mlValidationCallout')).not.toHaveCount(0);
-      await expect(page.testSubj.locator('~mlValidationCallout')).toHaveCount(
-        REGRESSION.expectedValidationCallouts
-      );
+      await assertValidationCalloutCount(page, REGRESSION.expectedValidationCallouts);
 
       await dataFrameAnalytics.continueToCreate();
-      await expect(
-        page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')
-      ).not.toBeDisabled();
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobWizardCreateButton')).toBeEnabled();
     });
 
     await test.step('runs the clone job and verifies it in the job list', async () => {
