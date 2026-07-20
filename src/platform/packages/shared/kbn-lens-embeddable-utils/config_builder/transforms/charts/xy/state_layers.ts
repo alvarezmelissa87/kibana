@@ -41,6 +41,7 @@ import {
 import { fromMetricAPItoLensState } from '../../columns/metric';
 import { fromBucketLensApiToLensState } from '../../columns/buckets';
 import { fromColorMappingAPIToLensState, isAutoColor } from '../../coloring';
+import { LENS_ESQL_ANNOTATION_DATA_VIEW_ID_SUFFIX } from '../../constants';
 import { processMetricColumnsWithReferences } from '../utils';
 
 const X_ACCESSOR = 'x';
@@ -118,12 +119,18 @@ function buildByValueAnnotationLayer(
   layer: AnnotationLayerByValueType | AnnotationLayerManualOnlyType,
   i: number,
   dataViewId: string | undefined
-): XYAnnotationLayerConfig {
+): XYPersistedByValueAnnotationLayerConfig {
+  // ES|QL XY charts need an inline indexPatternId on annotation layers pointing at a
+  // companion regular (non-ES|QL) ad-hoc data view. All other by-value annotation
+  // layers omit indexPatternId and let the Lens XY runtime inject it from references.
+  const isEsqlCompanionDataView =
+    dataViewId != null && dataViewId.endsWith(LENS_ESQL_ANNOTATION_DATA_VIEW_ID_SUFFIX);
+
   return {
     layerType: 'annotations',
     persistanceType: 'byValue',
     layerId: getIdForLayer(layer, i),
-    indexPatternId: dataViewId ?? '',
+    ...(isEsqlCompanionDataView ? { indexPatternId: dataViewId } : {}),
     ignoreGlobalFilters: layer.ignore_global_filters,
     annotations: layer.events.map((annotation, index) => {
       if (annotation.type === 'range') {
@@ -253,7 +260,7 @@ export function buildXYLayer(
     }
 
     // by-value annotation layer
-    return buildByValueAnnotationLayer(layer, i);
+    return buildByValueAnnotationLayer(layer, i, dataViewId);
   }
   if (isAPIReferenceLineLayer(layer)) {
     return buildReferenceLineLayer(layer, i);

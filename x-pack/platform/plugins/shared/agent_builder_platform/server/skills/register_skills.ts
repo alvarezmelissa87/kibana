@@ -21,7 +21,6 @@ export const registerSkills = (
   agentBuilder.skills.register(graphCreationSkill);
   agentBuilder.skills.register(skillManagementSkill);
   agentBuilder.skills.register(agentBuilderTracesSkill);
-  agentBuilder.skills.register(connectorAuthoringSkill);
   agentBuilder.skills.register(changePointDetectionSkill);
   agentBuilder.skills.register(connectorAuthoringSkill({ getActionsStart }));
   agentBuilder.skills.register(kiAutomationGenerationSkill);

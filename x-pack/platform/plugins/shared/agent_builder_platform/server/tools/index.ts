@@ -21,7 +21,6 @@ import { indexExplorerTool } from './index_explorer';
 import { generateEsqlTool } from './generate_esql';
 import { executeEsqlTool } from './execute_esql';
 import { searchTool } from './search';
-import { createVisualizationTool } from './create_visualization';
 import { detectChangePointsTool } from './detect_change_points';
 
 export const registerTools = ({
@@ -41,7 +40,6 @@ export const registerTools = ({
     getIndexMappingsTool(),
     listIndicesTool(),
     indexExplorerTool(),
-    createVisualizationTool(),
     detectChangePointsTool(),
     productDocumentationTool(coreSetup),
     integrationKnowledgeTool(coreSetup),

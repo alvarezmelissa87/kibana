@@ -173,22 +173,23 @@ function getLayerPresence(dataLayers: XYDataLayerConfig[]): LayerPresence {
   };
 }
 
+type LayerToDataView = Record<string, string>;
+
 export function buildVisualizationState(
   config: XYConfig,
+  usedDataViews: LayerToDataView,
   annotationGroupReferences: SavedObjectReference[]
 ): XYPersistedState {
-  // Manual-only annotation layers have no data_source and therefore no entry in usedDataViews.
-  // They still need a valid indexPatternId so Lens can resolve the time axis.
-  // Borrow the first data-layer's data view ID as a fallback.
-  const fallbackDataViewId = Object.values(usedDataViews).find(Boolean) ?? '';
-
   const layers = config.layers
-    .map((layer, index) => {
-      const dataViewId =
-        usedDataViews[getIdForLayer(layer, index)] ??
-        (isAPIAnnotationLayer(layer) ? fallbackDataViewId : undefined);
-      return buildXYLayer(config, layer, index, dataViewId, annotationGroupReferences);
-    })
+    .map((layer, index) =>
+      buildXYLayer(
+        config,
+        layer,
+        index,
+        usedDataViews[getIdForLayer(layer, index)],
+        annotationGroupReferences
+      )
+    )
     .filter(nonNullable);
   return {
     preferredSeriesType: layers.filter(isLensStateDataLayer)[0]?.seriesType ?? 'bar_stacked',

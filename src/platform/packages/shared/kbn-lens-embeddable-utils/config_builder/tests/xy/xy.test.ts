@@ -1177,6 +1177,7 @@ describe('XY', () => {
         // triggering the ES|QL text-based initialisation path (which would hang).
         const annotationDataViewId = (annotationLayer as any).indexPatternId;
         expect(annotationDataViewId).toBeTruthy();
+        expect(annotationDataViewId).toMatch(/--annotation$/);
         const adHocDataViews = lensState.state.adHocDataViews ?? {};
         const esqlDataViewEntry = Object.entries(adHocDataViews).find(
           ([, dataView]) => (dataView as any).type === 'esql'
@@ -1188,6 +1189,16 @@ describe('XY', () => {
         expect(annotationDataView).toBeDefined();
         // Must NOT be an ES|QL data view type
         expect((annotationDataView as any).type).not.toBe('esql');
+
+        // Companion data view is also referenced under the XY annotation layer name so
+        // Lens persistence can resolve it (see xy-visualization-layer- prefix).
+        const annotationLayerId = annotationLayer.layerId;
+        const companionRef = (lensState.state.internalReferences ?? []).find(
+          (ref) => ref.name === `xy-visualization-layer-${annotationLayerId}`
+        );
+        expect(companionRef).toBeDefined();
+        expect(companionRef?.id).toBe(annotationDataViewId);
+        expect(companionRef?.type).toBe('index-pattern');
       }
     });
   });

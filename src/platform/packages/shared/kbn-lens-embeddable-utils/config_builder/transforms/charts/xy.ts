@@ -27,7 +27,12 @@ import type { APIAdHocDataView } from '../columns/types';
 import { buildVisualizationAPI, buildVisualizationState } from './xy/chart';
 import { buildFormBasedXYLayer, getValueColumns } from './xy/state_layers';
 import { isAPIAnnotationLayer, getIdForLayer } from './xy/helpers';
-import { LENS_LAYER_SUFFIX, LENS_DEFAULT_TIME_FIELD } from '../constants';
+import {
+  LENS_LAYER_SUFFIX,
+  LENS_XY_ANNOTATION_LAYER_SUFFIX,
+  LENS_DEFAULT_TIME_FIELD,
+  LENS_ESQL_ANNOTATION_DATA_VIEW_ID_SUFFIX,
+} from '../constants';
 
 type XYLens = Extract<TypedLensSerializedState['attributes'], { visualizationType: 'lnsXY' }>;
 type XYLensState = Omit<XYLens['state'], 'filters' | 'query'>;
@@ -37,7 +42,7 @@ type XYLensWithoutQueryAndFilters = Omit<XYLens, 'state'> & {
   state: Omit<XYLensState, 'visualization'> & { visualization: XYPersistedState };
 };
 
-const ANNOTATION_DATA_VIEW_ID_SUFFIX = '--annotation';
+const ANNOTATION_DATA_VIEW_ID_SUFFIX = LENS_ESQL_ANNOTATION_DATA_VIEW_ID_SUFFIX;
 
 function getAnnotationDataViewId(dataView: APIAdHocDataView): string {
   return `${generateAdHocDataViewId(dataView)}${ANNOTATION_DATA_VIEW_ID_SUFFIX}`;
@@ -80,6 +85,16 @@ export function fromAPItoLensState(config: XYConfig): XYLensWithoutQueryAndFilte
     regularDataViews.map(([key, { id }]) => [key, id])
   );
 
+  const dataViewLayerToIdMap: Record<string, string> = Object.fromEntries([
+    ...Object.entries(regularDataViewsMap),
+    ...internalReferences.map((ref) => {
+      const layerId = ref.name.startsWith(LENS_XY_ANNOTATION_LAYER_SUFFIX)
+        ? ref.name.replace(LENS_XY_ANNOTATION_LAYER_SUFFIX, '')
+        : ref.name.replace(LENS_LAYER_SUFFIX, '');
+      return [layerId, ref.id];
+    }),
+  ]);
+
   // Annotation layers in ES|QL charts must use a *regular* (non-ES|QL-typed) ad-hoc data view.
   // The Lens XY visualization calls getUsedDataViews() on all annotation layers before rendering
   // and tries to initialise an ES|QL text-based context when it finds a data view with
@@ -114,15 +129,23 @@ export function fromAPItoLensState(config: XYConfig): XYLensWithoutQueryAndFilte
 
       adHocDataViews[annotationDataViewId] = annotationDataViewSpec;
 
-      for (const i of annotationLayerIndices) {
-        dataViewLayerToIdMap[getIdForLayer(config.layers[i], i)] = annotationDataViewId;
-      }
+      const annotationLayerRefsMap = Object.fromEntries(
+        annotationLayerIndices.map((i) => [getIdForLayer(config.layers[i], i), annotationDataViewId])
+      );
+
+      Object.assign(dataViewLayerToIdMap, annotationLayerRefsMap);
+
+      internalReferences.push(...buildReferences(annotationLayerRefsMap, annotationLayerIds));
     }
   }
 
   const annotationGroupReferences: SavedObjectReference[] = [];
 
-  const visualizationState = buildVisualizationState(config, annotationGroupReferences);
+  const visualizationState = buildVisualizationState(
+    config,
+    dataViewLayerToIdMap,
+    annotationGroupReferences
+  );
 
   const references = [
     ...annotationGroupReferences,
