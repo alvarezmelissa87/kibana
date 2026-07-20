@@ -35,11 +35,9 @@ export const administersMaintainer: RegisterEntityMaintainerConfig = {
         : undefined;
 
     if (lastProcessedTimestamp) {
-      logger.info(
-        `Starting administers maintainer run (incremental from ${lastProcessedTimestamp})`
-      );
+      logger.info(`[administers] Starting run (incremental from ${lastProcessedTimestamp})`);
     } else {
-      logger.info('Starting administers maintainer run (full scan — first run)');
+      logger.info('[administers] Starting run (full scan — first run)');
     }
 
     const collector: RelationshipMaintainerTelemetryCollector = {
@@ -69,7 +67,8 @@ export const administersMaintainer: RegisterEntityMaintainerConfig = {
         droppedNotInStore: result.totalNotFound,
         failed: result.totalWriteErrors,
         metadataDocsApplied: result.totalMetadataDocsApplied,
-        // TODO: extend telemetry schema to include droppedTargets (phantom ID validation)
+        // TODO: investigate whether to extend the telemetry funnel schema with a new field for
+        // droppedTargets (result.totalDroppedTargets) or map it to an existing field before wiring.
       },
       sources: collector.sources,
       ...(Object.keys(collector.relationshipTypeApplied).length > 0 && {
@@ -81,19 +80,20 @@ export const administersMaintainer: RegisterEntityMaintainerConfig = {
     });
 
     logger.info(
-      `Completed run: ${result.totalBuckets} buckets, ${result.totalRecords} records, ${result.totalWritten} entities written, ${result.totalDroppedTargets} targets dropped, ${result.totalMetadataDocsApplied} metadata docs appended`
+      `[administers] Completed run: ${result.totalBuckets} buckets, ${result.totalRecords} records, ${result.totalWritten} entities written, ${result.totalDroppedTargets} targets dropped, ${result.totalMetadataDocsApplied} metadata docs appended`
     );
 
     // Do not advance the watermark if the run was aborted — the next run should
     // re-process the same window to avoid missing entities.
     if (abortController.signal.aborted) {
-      logger.info('Run was aborted; watermark not advanced');
+      logger.info('[administers] Run was aborted; watermark not advanced');
       return status.state;
     }
 
+    const { lastRunTimestamp, ...persistedResult } = result;
     return {
-      ...result,
-      lastProcessedTimestamp: result.lastRunTimestamp,
+      ...persistedResult,
+      lastProcessedTimestamp: lastRunTimestamp,
     };
   },
 };

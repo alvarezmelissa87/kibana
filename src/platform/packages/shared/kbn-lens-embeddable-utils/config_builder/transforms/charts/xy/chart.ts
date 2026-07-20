@@ -173,11 +173,8 @@ function getLayerPresence(dataLayers: XYDataLayerConfig[]): LayerPresence {
   };
 }
 
-type LayerToDataView = Record<string, string>;
-
 export function buildVisualizationState(
   config: XYConfig,
-  usedDataViews: LayerToDataView,
   annotationGroupReferences: SavedObjectReference[]
 ): XYPersistedState {
   // Manual-only annotation layers have no data_source and therefore no entry in usedDataViews.

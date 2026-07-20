@@ -9,8 +9,9 @@ import React from 'react';
 import { EuiHorizontalRule } from '@elastic/eui';
 import { useIsExperimentalFeatureEnabled } from '../../../../common/hooks/use_experimental_features';
 import type { Entity } from '../../../../../common/api/entity_analytics';
-import { ObservedDataSection } from './components/observed_data_section';
+import { ObservedDataSection } from '../../shared/components/observed_data_section';
 import { useAnomalyOverview } from '../../../../entity_analytics/api/hooks/use_anomaly_overview';
+import { useAnomalyPrivileges } from '../../../../entity_analytics/api/hooks/use_anomaly_privileges';
 import { useHasEntityResolutionLicense } from '../../../../common/hooks/use_has_entity_resolution_license';
 import { EntityHighlightsAccordion } from '../../../../entity_analytics/components/entity_details_flyout/components/entity_highlights';
 import { EntityInsight } from '../../../../cloud_security_posture/components/entity_insight';
@@ -19,14 +20,17 @@ import { FlyoutRiskSummary } from '../../../../entity_analytics/components/risk_
 import type { RiskScoreState } from '../../../../entity_analytics/api/hooks/use_risk_score';
 import type { EntityRiskScoresState } from '../../../../entity_analytics/api/hooks/use_entity_risk_scores';
 import { EntityIdentifierFields, EntityType } from '../../../../../common/entity_analytics/types';
-import { HOST_PANEL_OBSERVED_HOST_QUERY_ID, HOST_PANEL_RISK_SCORE_QUERY_ID } from './constants';
+import { HOST_PANEL_OBSERVED_HOST_QUERY_ID } from './constants';
 import type { EntityDetailsPath } from '../../../../flyout/entity_details/shared/components/left_panel/left_panel_header';
 import type { IdentityFields } from '../../../../flyout/document_details/shared/utils';
-import type { ObservedEntityData } from '../../../../flyout/entity_details/shared/components/observed_entity/types';
+import type { ObservedEntityData } from '../../shared/components/observed_entity/types';
 import type { EntityRiskScore, HostItem } from '../../../../../common/search_strategy';
 import { VisualizationsSection } from '../../../../flyout/entity_details/shared/components/right/visualizations_section';
 import { ResolutionSection } from '../../../../entity_analytics/components/entity_resolution/resolution_section';
-import { AnomaliesSection } from '../../../../entity_analytics/components/anomalies/anomalies_section';
+import {
+  AnomaliesSection,
+  EMPTY_ANOMALY_OVERVIEW,
+} from '../../../../entity_analytics/components/anomalies/anomalies_section';
 
 type ObservedHostData = Omit<ObservedEntityData<HostItem>, 'anomalies'>;
 
@@ -53,6 +57,8 @@ export interface ContentProps {
   isPreviewMode: boolean;
   /** When using Entity Store v2: entity record for asset criticality upsert. */
   entityRecord?: Entity;
+  /** Refetch entity store record after AI summary persist (v2). */
+  refetchEntityRecord?: () => void;
   /** When true (e.g. entity store v2 enabled but no entity found), hide risk score and asset criticality. */
   skipRiskAndCriticality?: boolean;
   /** Entity store entity ID for the host. */
@@ -66,6 +72,22 @@ export interface ContentProps {
    * it sets this to `false` to hide the (otherwise no-op) Show-graph icon and Resolution-group link.
    */
   enableGraphAndResolutionNavigation?: boolean;
+  /** When true, hides the chevron icons in the risk summary and alerts section headers. Used by the v2 flyout. */
+  hideHeaderIcons?: boolean;
+  /**
+   * When provided, clicking a related entity in the resolution section is delegated to this callback
+   * (used by the new EUI system flyout) instead of the legacy expandable flyout.
+   */
+  onShowEntity?: (params: {
+    engineType: string | undefined;
+    entityId: string;
+    entityName: string | undefined;
+  }) => void;
+  /**
+   * Inspect query id for {@link FlyoutRiskSummary}. Callers must pass a stable id that matches
+   * their `useQueryInspector` registration
+   */
+  riskScoreQueryId: string;
 }
 
 /**
@@ -83,18 +105,24 @@ export const Content = ({
   onAssetCriticalityChange,
   isPreviewMode,
   entityRecord,
+  refetchEntityRecord,
   skipRiskAndCriticality = false,
   entityStoreEntityId,
   prefetchedResolutionRisk,
   enableGraphAndResolutionNavigation = true,
+  hideHeaderIcons = false,
+  onShowEntity,
+  riskScoreQueryId,
 }: ContentProps) => {
   const hasEntityResolutionLicense = useHasEntityResolutionLicense();
   const isAnomalyDetailsEnabled = useIsExperimentalFeatureEnabled('entityAnalyticsAnomalyDetails');
-
+  const { data: anomalyPrivilegesData } = useAnomalyPrivileges(isAnomalyDetailsEnabled);
+  const hasAnomalyPrivileges = anomalyPrivilegesData?.has_all_required ?? false;
+  const loadAnomalies = isAnomalyDetailsEnabled && hasAnomalyPrivileges && !!entityStoreEntityId;
   const anomalyOverview = useAnomalyOverview({
     entityId: entityStoreEntityId ?? '',
     entityType: EntityType.host,
-    enabled: isAnomalyDetailsEnabled && !!entityStoreEntityId,
+    enabled: loadAnomalies,
   });
 
   // Extract hostName from identityFields for components that need a string
@@ -106,8 +134,10 @@ export const Content = ({
     <>
       {!skipRiskAndCriticality && (
         <EntityHighlightsAccordion
-          entityIdentifier={entityRecord ? entityRecord.entity.id : hostName}
+          entityIdentifier={entityRecord ? entityRecord.entity?.id ?? hostName : hostName}
           entityType={EntityType.host}
+          entityRecord={entityRecord}
+          refetchEntityRecord={refetchEntityRecord}
         />
       )}
       {!skipRiskAndCriticality &&
@@ -119,25 +149,27 @@ export const Content = ({
               riskScoreData={riskScoreState}
               entityRiskScores={entityRiskScores}
               recalculatingScore={recalculatingScore}
-              queryId={HOST_PANEL_RISK_SCORE_QUERY_ID}
+              queryId={riskScoreQueryId}
               openDetailsPanel={openDetailsPanel}
               isPreviewMode={isPreviewMode}
-              entityId={entityRecord?.entity.id}
+              entityId={entityRecord?.entity?.id}
               prefetchedResolutionRisk={prefetchedResolutionRisk}
+              hideHeaderIcon={hideHeaderIcons}
             />
             <EuiHorizontalRule />
           </>
         )}
-      {isAnomalyDetailsEnabled &&
-        entityStoreEntityId &&
-        anomalyOverview.data &&
-        anomalyOverview.data.totalAnomaliesCount > 0 && (
+      {loadAnomalies &&
+        (anomalyOverview.isLoading || anomalyOverview.isError || anomalyOverview.data) && (
           <>
             <AnomaliesSection
-              data={anomalyOverview.data}
+              data={anomalyOverview.data ?? EMPTY_ANOMALY_OVERVIEW}
               entityId={entityStoreEntityId}
               isPreviewMode={isPreviewMode}
               openDetailsPanel={openDetailsPanel}
+              hideHeaderIcons={hideHeaderIcons}
+              isLoading={anomalyOverview.isLoading}
+              isError={anomalyOverview.isError}
             />
           </>
         )}
@@ -148,6 +180,7 @@ export const Content = ({
             isPreviewMode={isPreviewMode}
             scopeId={scopeId}
             openDetailsPanel={enableGraphAndResolutionNavigation ? openDetailsPanel : undefined}
+            hideHeaderIcons={hideHeaderIcons}
           />
           <EuiHorizontalRule margin="m" />
         </>
@@ -159,6 +192,8 @@ export const Content = ({
             entityType={EntityType.host}
             scopeId={scopeId}
             openDetailsPanel={enableGraphAndResolutionNavigation ? openDetailsPanel : undefined}
+            onShowEntity={onShowEntity}
+            hideHeaderIcons={hideHeaderIcons}
           />
           <EuiHorizontalRule />
         </>
@@ -175,9 +210,12 @@ export const Content = ({
         isPreviewMode={isPreviewMode}
         openDetailsPanel={openDetailsPanel}
         entityType={EntityType.host}
+        hideHeaderIcons={hideHeaderIcons}
+        scopeId={scopeId}
       />
       <ObservedDataSection
-        observedHost={observedHost}
+        entityType={EntityType.host}
+        observedData={observedHost}
         contextID={contextID}
         identityFields={identityFields}
         entityRecord={entityRecord}

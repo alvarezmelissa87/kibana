@@ -51,7 +51,26 @@ export function fromAPItoLensState(config: XYConfig): XYLensWithoutQueryAndFilte
     getValueColumns
   );
 
-  const { adHocDataViews, internalReferences } = getAdhocDataviews(usedDataviews);
+  // By-value annotation layers persist their data view under the
+  // `xy-visualization-layer-` reference name (regular and ad hoc alike), matching
+  // Lens's own persistence logic so the XY runtime can resolve it. A manual-only
+  // layer carries no data view at all and emits no such reference; the runtime
+  // then falls back to the first index-pattern reference at load time (see
+  // x-pack/.../lens/public/visualizations/xy/persistence.ts).
+  const annotationLayerIds = new Set(
+    config.layers
+      .map((layer, index) =>
+        isAPIAnnotationLayer(layer) && !('group_id' in layer)
+          ? getIdForLayer(layer, index)
+          : undefined
+      )
+      .filter((id): id is string => id != null)
+  );
+
+  const { adHocDataViews, internalReferences } = getAdhocDataviews(
+    usedDataviews,
+    annotationLayerIds
+  );
 
   const regularDataViews = Object.entries(usedDataviews).filter(
     (v): v is [string, { id: string; type: 'dataView' }] => v[1].type === 'dataView'
@@ -60,11 +79,6 @@ export function fromAPItoLensState(config: XYConfig): XYLensWithoutQueryAndFilte
   const regularDataViewsMap = Object.fromEntries(
     regularDataViews.map(([key, { id }]) => [key, id])
   );
-  // merge both internal references and regularDataViews into a single map { layerId => dataViewId }
-  const dataViewLayerToIdMap: Record<string, string> = Object.fromEntries([
-    ...Object.entries(regularDataViewsMap).map(([layerId, dataViewId]) => [layerId, dataViewId]),
-    ...internalReferences.map((ref) => [ref.name.replace(LENS_LAYER_SUFFIX, ''), ref.id]),
-  ]);
 
   // Annotation layers in ES|QL charts must use a *regular* (non-ES|QL-typed) ad-hoc data view.
   // The Lens XY visualization calls getUsedDataViews() on all annotation layers before rendering
@@ -108,15 +122,11 @@ export function fromAPItoLensState(config: XYConfig): XYLensWithoutQueryAndFilte
 
   const annotationGroupReferences: SavedObjectReference[] = [];
 
-  const visualizationState = buildVisualizationState(
-    config,
-    dataViewLayerToIdMap,
-    annotationGroupReferences
-  );
+  const visualizationState = buildVisualizationState(config, annotationGroupReferences);
 
   const references = [
     ...annotationGroupReferences,
-    ...(regularDataViews.length ? buildReferences(regularDataViewsMap) : []),
+    ...buildReferences(regularDataViewsMap, annotationLayerIds),
   ];
 
   return {
