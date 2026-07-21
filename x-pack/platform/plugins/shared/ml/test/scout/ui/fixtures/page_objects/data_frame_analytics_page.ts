@@ -114,6 +114,18 @@ export class DataFrameAnalyticsPage {
 
   // ── Additional options step ───────────────────────────────────────────────
 
+  async openHyperParameters(): Promise<void> {
+    await this.page.testSubj.locator('mlAnalyticsCreateJobWizardHyperParametersSection').click();
+    await this.page.testSubj
+      .locator('mlAnalyticsCreateJobFlyoutMaxTreesInput')
+      .waitFor({ state: 'visible' });
+  }
+
+  async setMaxTrees(value: number): Promise<void> {
+    await this.openHyperParameters();
+    await this.page.testSubj.locator('mlAnalyticsCreateJobFlyoutMaxTreesInput').fill(`${value}`);
+  }
+
   async continueToDetails(): Promise<void> {
     await this.page.testSubj
       .locator(

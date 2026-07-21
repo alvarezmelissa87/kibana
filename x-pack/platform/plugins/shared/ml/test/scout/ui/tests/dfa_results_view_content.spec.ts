@@ -323,8 +323,6 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
     browserAuth,
     pageObjects: { dataFrameAnalytics, visualize },
   }) => {
-    test.setTimeout(10 * 60 * 1000);
-
     await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
 
     await test.step('opens the results view', async () => {
@@ -409,8 +407,6 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
     browserAuth,
     pageObjects: { dataFrameAnalytics, visualize },
   }) => {
-    test.setTimeout(10 * 60 * 1000);
-
     await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
 
     await test.step('opens the results view', async () => {
@@ -487,8 +483,6 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
     browserAuth,
     pageObjects: { dataFrameAnalytics, visualize },
   }) => {
-    test.setTimeout(10 * 60 * 1000);
-
     await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
 
     await test.step('opens the results view', async () => {

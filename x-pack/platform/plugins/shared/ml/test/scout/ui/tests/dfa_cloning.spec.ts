@@ -47,6 +47,7 @@ const CLASSIFICATION = {
         prediction_field_name: 'test',
         dependent_variable: 'y',
         training_percent: 20,
+        max_trees: 10,
       },
     },
     analyzed_fields: { includes: [], excludes: [] },
@@ -111,6 +112,7 @@ const REGRESSION = {
         prediction_field_name: 'test',
         dependent_variable: 'stab',
         training_percent: 20,
+        max_trees: 10,
       },
     },
     analyzed_fields: { includes: [], excludes: [] },
@@ -156,11 +158,20 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
   let outlierSourceViewId: string | undefined;
   let regressionSourceViewId: string | undefined;
 
-  test.beforeAll(async ({ esArchiver, apiServices }) => {
+  test.beforeAll(async ({ esArchiver, apiServices, esClient }) => {
     await Promise.all([
       apiServices.ml.dataFrameAnalytics.deleteIfExists(CLASSIFICATION.jobId),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(CLASSIFICATION.cloneJobId),
       apiServices.ml.dataFrameAnalytics.deleteIfExists(OUTLIER.jobId),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(OUTLIER.cloneJobId),
       apiServices.ml.dataFrameAnalytics.deleteIfExists(REGRESSION.jobId),
+      apiServices.ml.dataFrameAnalytics.deleteIfExists(REGRESSION.cloneJobId),
+      esClient.indices.delete({
+        index: CLASSIFICATION.cloneDestIndex,
+        ignore_unavailable: true,
+      }),
+      esClient.indices.delete({ index: OUTLIER.cloneDestIndex, ignore_unavailable: true }),
+      esClient.indices.delete({ index: REGRESSION.cloneDestIndex, ignore_unavailable: true }),
     ]);
 
     // Load archives (idempotent)
@@ -238,7 +249,8 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     pageObjects: { dataFrameAnalytics },
     apiServices,
   }) => {
-    test.setTimeout(15 * 60 * 1000);
+    // The bounded clone may run for up to 2 minutes; allow another minute for the UI journey.
+    test.setTimeout(3 * 60 * 1000);
 
     await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
 
@@ -287,6 +299,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await expect(
         page.testSubj.locator('mlAnalyticsCreateJobWizardPredictionFieldNameInput')
       ).toHaveValue(CLASSIFICATION.expectedPredictionFieldName);
+      await dataFrameAnalytics.openHyperParameters();
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobFlyoutMaxTreesInput')).toHaveValue(
+        '10'
+      );
 
       await dataFrameAnalytics.continueToDetails();
     });
@@ -319,12 +335,11 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     await test.step('runs the clone job and verifies it in the job list', async () => {
       await dataFrameAnalytics.createAndStartJob();
 
-      await expect
-        .poll(() => apiServices.ml.dataFrameAnalytics.getStats(CLASSIFICATION.cloneJobId), {
-          timeout: 5 * 60 * 1000,
-          intervals: [5_000],
-        })
-        .toStrictEqual({ state: 'stopped', hasTrainingDocs: true });
+      await apiServices.ml.dataFrameAnalytics.waitForStopped(CLASSIFICATION.cloneJobId);
+      expect(
+        (await apiServices.ml.dataFrameAnalytics.getStats(CLASSIFICATION.cloneJobId))
+          .hasTrainingDocs
+      ).toBe(true);
 
       await dataFrameAnalytics.gotoJobList();
       await dataFrameAnalytics.filterByJobId(CLASSIFICATION.cloneJobId);
@@ -354,7 +369,8 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     pageObjects: { dataFrameAnalytics },
     apiServices,
   }) => {
-    test.setTimeout(15 * 60 * 1000);
+    // The clone may run for up to 2 minutes; allow another minute for the UI journey.
+    test.setTimeout(3 * 60 * 1000);
 
     await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
 
@@ -417,12 +433,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     await test.step('runs the clone job and verifies it in the job list', async () => {
       await dataFrameAnalytics.createAndStartJob();
 
-      await expect
-        .poll(() => apiServices.ml.dataFrameAnalytics.getStats(OUTLIER.cloneJobId), {
-          timeout: 5 * 60 * 1000,
-          intervals: [5_000],
-        })
-        .toStrictEqual({ state: 'stopped', hasTrainingDocs: true });
+      await apiServices.ml.dataFrameAnalytics.waitForStopped(OUTLIER.cloneJobId);
+      expect(
+        (await apiServices.ml.dataFrameAnalytics.getStats(OUTLIER.cloneJobId)).hasTrainingDocs
+      ).toBe(true);
 
       await dataFrameAnalytics.gotoJobList();
       await dataFrameAnalytics.filterByJobId(OUTLIER.cloneJobId);
@@ -452,7 +466,8 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     pageObjects: { dataFrameAnalytics },
     apiServices,
   }) => {
-    test.setTimeout(15 * 60 * 1000);
+    // The bounded clone may run for up to 2 minutes; allow another minute for the UI journey.
+    test.setTimeout(3 * 60 * 1000);
 
     await browserAuth.loginWithCustomRole(ML_USERS.mlPoweruser);
 
@@ -497,6 +512,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
       await expect(
         page.testSubj.locator('mlAnalyticsCreateJobWizardPredictionFieldNameInput')
       ).toHaveValue(REGRESSION.expectedPredictionFieldName);
+      await dataFrameAnalytics.openHyperParameters();
+      await expect(page.testSubj.locator('mlAnalyticsCreateJobFlyoutMaxTreesInput')).toHaveValue(
+        '10'
+      );
 
       await dataFrameAnalytics.continueToDetails();
     });
@@ -529,12 +548,10 @@ test.describe('DFA job cloning', { tag: '@local-stateful-classic' }, () => {
     await test.step('runs the clone job and verifies it in the job list', async () => {
       await dataFrameAnalytics.createAndStartJob();
 
-      await expect
-        .poll(() => apiServices.ml.dataFrameAnalytics.getStats(REGRESSION.cloneJobId), {
-          timeout: 5 * 60 * 1000,
-          intervals: [5_000],
-        })
-        .toStrictEqual({ state: 'stopped', hasTrainingDocs: true });
+      await apiServices.ml.dataFrameAnalytics.waitForStopped(REGRESSION.cloneJobId);
+      expect(
+        (await apiServices.ml.dataFrameAnalytics.getStats(REGRESSION.cloneJobId)).hasTrainingDocs
+      ).toBe(true);
 
       await dataFrameAnalytics.gotoJobList();
       await dataFrameAnalytics.filterByJobId(REGRESSION.cloneJobId);

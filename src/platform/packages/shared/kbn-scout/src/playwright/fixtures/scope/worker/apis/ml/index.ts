@@ -668,7 +668,7 @@ export const getMlApiHelper = (
       );
     },
 
-    async waitForStopped(analyticsId: string, timeoutMs = 15 * 60 * 1000): Promise<void> {
+    async waitForStopped(analyticsId: string, timeoutMs = 2 * 60 * 1000): Promise<void> {
       await waitForCondition(
         `data frame analytics job '${analyticsId}' to stop`,
         async () => {
@@ -702,7 +702,7 @@ export const getMlApiHelper = (
 
     async createAndRun(
       jobConfig: { id: string; [key: string]: unknown },
-      { timeoutMs = 15 * 60 * 1000, space }: { timeoutMs?: number; space?: string } = {}
+      { timeoutMs = 2 * 60 * 1000, space }: { timeoutMs?: number; space?: string } = {}
     ): Promise<void> {
       await measurePerformanceAsync(
         log,

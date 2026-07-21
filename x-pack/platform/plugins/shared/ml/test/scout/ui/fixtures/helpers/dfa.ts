@@ -12,6 +12,7 @@ interface CleanupDfaTestArgs {
   apiServices: ApiServicesFixture;
   kbnClient: KbnClient;
   esClient: EsClient;
+  jobId: string;
   dataViewId: string | undefined;
   dashboardId: string | undefined;
   destinationIndex: string;
@@ -113,13 +114,11 @@ export const cleanupDfaResultsTest = async ({
   }
 };
 
-// ── Original global helper (kept for existing specs) ─────────────────────────
-
 /**
- * Tears down all state mutated by a DFA spec suite:
- * - all DFA indices (via the ML cleanup API)
+ * Tears down the state mutated by one DFA creation spec:
+ * - the specific DFA job
  * - the per-spec source data view
- * - the shared ML Test dashboard
+ * - the per-spec ML Test dashboard
  * - the destination index created when the job ran
  * - the destination data view auto-created alongside the destination index
  */
@@ -127,21 +126,33 @@ export const cleanupDfaTest = async ({
   apiServices,
   kbnClient,
   esClient,
+  jobId,
   dataViewId,
   dashboardId,
   destinationIndex,
 }: CleanupDfaTestArgs): Promise<void> => {
-  await apiServices.ml.indices.cleanDataFrameAnalytics();
-  if (dataViewId) {
-    await apiServices.dataViews.delete(dataViewId);
-  }
-  if (dashboardId) {
-    await kbnClient.savedObjects.delete({ type: 'dashboard', id: dashboardId });
-  }
-  await esClient.indices.delete({ index: destinationIndex, ignore_unavailable: true });
-  const destViews = await apiServices.dataViews.getAll();
-  const destView = destViews.data.find((dv: { title: string }) => dv.title === destinationIndex);
-  if (destView) {
-    await apiServices.dataViews.delete(destView.id);
+  const deleteDestinationDataView = async (): Promise<void> => {
+    const destViews = await apiServices.dataViews.getAll();
+    const destView = destViews.data.find((view) => view.title === destinationIndex);
+    if (destView) {
+      await apiServices.dataViews.delete(destView.id);
+    }
+  };
+
+  const cleanupResults = await Promise.allSettled([
+    apiServices.ml.dataFrameAnalytics.deleteIfExists(jobId),
+    dataViewId ? apiServices.dataViews.delete(dataViewId) : Promise.resolve(),
+    dashboardId
+      ? kbnClient.savedObjects.delete({ type: 'dashboard', id: dashboardId })
+      : Promise.resolve(),
+    esClient.indices.delete({ index: destinationIndex, ignore_unavailable: true }),
+    deleteDestinationDataView(),
+  ]);
+  const failures = cleanupResults
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map(({ reason }) => reason);
+
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Failed to clean up DFA creation test resources');
   }
 };
