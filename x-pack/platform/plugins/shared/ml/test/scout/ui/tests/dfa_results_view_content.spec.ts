@@ -369,13 +369,13 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
     });
 
     await test.step('histogram charts toggle on and off', async () => {
-      await dataFrameAnalytics.toggleHistogramCharts(true);
+      await dataFrameAnalytics.toggleHistogramCharts(true, BINARY_CLASSIFICATION.sortBy.column);
       for (const expected of BINARY_CLASSIFICATION.expectedHistogramCharts) {
         const state = await dataFrameAnalytics.getHistogramChartState(expected.id);
         assertHistogramChartState(state, expected);
       }
 
-      await dataFrameAnalytics.toggleHistogramCharts(false);
+      await dataFrameAnalytics.toggleHistogramCharts(false, BINARY_CLASSIFICATION.sortBy.column);
       for (const expected of BINARY_CLASSIFICATION.expectedHistogramCharts) {
         await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).toBeHidden();
       }
@@ -448,13 +448,13 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
     });
 
     await test.step('histogram charts toggle on and off', async () => {
-      await dataFrameAnalytics.toggleHistogramCharts(true);
+      await dataFrameAnalytics.toggleHistogramCharts(true, MULTI_CLASS.sortBy.column);
       for (const expected of MULTI_CLASS.expectedHistogramCharts) {
         const state = await dataFrameAnalytics.getHistogramChartState(expected.id);
         assertHistogramChartState(state, expected);
       }
 
-      await dataFrameAnalytics.toggleHistogramCharts(false);
+      await dataFrameAnalytics.toggleHistogramCharts(false, MULTI_CLASS.sortBy.column);
       for (const expected of MULTI_CLASS.expectedHistogramCharts) {
         await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).toBeHidden();
       }
@@ -524,13 +524,13 @@ test.describe('DFA results view content', { tag: '@local-stateful-classic' }, ()
     });
 
     await test.step('histogram charts toggle on and off', async () => {
-      await dataFrameAnalytics.toggleHistogramCharts(true);
+      await dataFrameAnalytics.toggleHistogramCharts(true, REGRESSION.sortBy.column);
       for (const expected of REGRESSION.expectedHistogramCharts) {
         const state = await dataFrameAnalytics.getHistogramChartState(expected.id);
         assertHistogramChartState(state, expected);
       }
 
-      await dataFrameAnalytics.toggleHistogramCharts(false);
+      await dataFrameAnalytics.toggleHistogramCharts(false, REGRESSION.sortBy.column);
       for (const expected of REGRESSION.expectedHistogramCharts) {
         await expect(page.testSubj.locator(`mlDataGridChart-${expected.id}`)).toBeHidden();
       }

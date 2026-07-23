@@ -219,10 +219,11 @@ export class DataFrameAnalyticsPage {
       .locator('analyticsWizardCardManagement')
       .waitFor({ state: 'visible', timeout: 40_000 });
     await this.page.testSubj.locator('analyticsWizardCardManagement').click();
-    // List re-fetches after navigation; 60 s covers slow ML backends.
+    // List re-fetches after navigation; a non-clean CI environment can make this slower than
+    // initial list navigation while the new job is also being started.
     await this.page.testSubj
       .locator('mlAnalyticsJobList')
-      .waitFor({ state: 'visible', timeout: 60_000 });
+      .waitFor({ state: 'visible', timeout: 90_000 });
   }
 
   // ── Job table ─────────────────────────────────────────────────────────────
@@ -549,12 +550,20 @@ export class DataFrameAnalyticsPage {
     );
   }
 
-  /** Toggles histogram chart preview; reads aria-pressed to avoid a redundant click. */
-  async toggleHistogramCharts(enable: boolean): Promise<void> {
+  /**
+   * Toggles histogram chart preview and waits for a known chart to render when enabling it.
+   * Reads aria-pressed to avoid a redundant click.
+   */
+  async toggleHistogramCharts(enable: boolean, readyChartId: string): Promise<void> {
     const button = this.page.testSubj.locator('mlExplorationDataGridHistogramButton');
     const isPressed = (await button.getAttribute('aria-pressed')) === 'true';
     if (isPressed !== enable) {
       await button.click();
+    }
+    if (enable) {
+      await this.page.testSubj
+        .locator(`mlDataGridChart-${readyChartId}`)
+        .waitFor({ state: 'visible' });
     }
   }
 
