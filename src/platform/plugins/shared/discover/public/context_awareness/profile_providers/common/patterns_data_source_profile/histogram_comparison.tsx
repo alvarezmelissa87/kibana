@@ -233,7 +233,7 @@ const CompareWithTotalControl = ({
   return (
     <Control
       data-test-subj="discoverCompareWithTotal"
-      iconType="chartBarVerticalStack"
+      iconType={selected ? 'eyeSlash' : 'eye'}
       color={selected ? 'primary' : 'text'}
       label={selected ? stopComparingLabel : compareWithTotalLabel}
       tooltipContent={orderedFilterTooltip}

@@ -15,7 +15,6 @@ import {
   EuiScreenReaderOnly,
   EuiSpacer,
   EuiText,
-  type UseEuiTheme,
 } from '@elastic/eui';
 import { ApproximationBadge } from '@kbn/esql-browser';
 import { FormattedMessage } from '@kbn/i18n-react';
@@ -94,9 +93,8 @@ import type { CascadedDocumentsContext } from './cascaded_documents';
 import { isCascadedDocumentsVisible } from './cascaded_documents';
 import { SaveDiscoverTableButton } from './save_discover_table_button';
 import type { RenderViewModeToggle } from '../../../../components/view_mode_toggle';
+import { SparklineComparisonContext } from '../../../../context_awareness/profile_providers/common/sparkline_data_source_profile/sparkline_cell_renderer';
 import { useHistogramComparisonState } from './histogram_comparison/use_histogram_comparison_state';
-
-const HISTOGRAM_COMPARISON_ROW_CLASS = 'dscDocuments__histogramComparisonRow';
 
 // export needs for testing
 export const onResize = (
@@ -623,11 +621,13 @@ function DiscoverDocumentsComponent({
     esqlVariables,
     defaultHistogramAvailable: gridHistogramComparisonEnabled,
   });
-  const getRowClassName = useCallback(
-    (record: DataTableRecord) =>
-      histogramComparisonSelection &&
-      record.flattened[histogramComparisonSelection.column] === histogramComparisonSelection.value
-        ? HISTOGRAM_COMPARISON_ROW_CLASS
+  const sparklineComparison = useMemo(
+    () =>
+      histogramComparisonSelection
+        ? {
+            column: histogramComparisonSelection.column,
+            value: histogramComparisonSelection.value,
+          }
         : undefined,
     [histogramComparisonSelection]
   );
@@ -658,83 +658,86 @@ function DiscoverDocumentsComponent({
       </EuiScreenReaderOnly>
       <div className="unifiedDataTable" css={styles.dataTable}>
         <CellActionsProvider getTriggerCompatibleActions={uiActions.getTriggerCompatibleActions}>
-          <DiscoverGrid
-            ariaLabelledBy="documentsAriaLabel"
-            cascadedDocumentsContext={cascadedDocumentsContext}
-            columns={currentColumns}
-            expandedDoc={expandedDocOwner === DEFAULT_EXPANDED_DOC_OWNER ? expandedDoc : undefined}
-            dataView={dataView}
-            dataSource={currentDataSource}
-            loadingState={
-              isDataLoading
-                ? DataLoadingState.loading
-                : isMoreDataLoading
-                ? DataLoadingState.loadingMore
-                : DataLoadingState.loaded
-            }
-            rows={rows}
-            sort={(sort as SortOrder[]) || []}
-            searchDescription={persistedDiscoverSession?.description}
-            searchTitle={persistedDiscoverSession?.title} // TODO: should it be rather a tab label?
-            setExpandedDoc={setExpandedDocForDefaultOwner}
-            showTimeCol={showTimeCol}
-            settings={grid}
-            onFilter={onAddFilter as DocViewFilterFn}
-            onOpenInNewTab={onOpenInNewTab}
-            onSetColumns={onSetColumns}
-            onSort={onSort}
-            onResize={onResizeDataGrid}
-            configHeaderRowHeight={3}
-            headerRowHeightState={headerRowHeight}
-            onUpdateHeaderRowHeight={onUpdateHeaderRowHeight}
-            rowHeightState={rowHeight}
-            onUpdateRowHeight={onUpdateRowHeight}
-            isSortEnabled={true}
-            isPaginationEnabled={!isEsqlMode}
-            rowsPerPageState={rowsPerPage ?? getDefaultRowsPerPage(services.uiSettings)}
-            onUpdateRowsPerPage={onUpdateRowsPerPage}
-            maxAllowedSampleSize={getMaxAllowedSampleSize(services.uiSettings)}
-            sampleSizeState={getAllowedSampleSize(sampleSizeState, services.uiSettings)}
-            onUpdateSampleSize={!isEsqlMode ? onUpdateSampleSize : undefined}
-            onFieldEdited={onFieldEdited}
-            configRowHeight={configRowHeight}
-            showMultiFields={uiSettings.get(SHOW_MULTIFIELDS)}
-            maxDocFieldsDisplayed={uiSettings.get(MAX_DOC_FIELDS_DISPLAYED)}
-            externalAdditionalControls={
-              approximationApplied ? (
-                <span style={{ marginRight: 4 }}>
-                  <ApproximationBadge
-                    isApproximationApplied
-                    data-test-subj="discoverApproximationApplied"
-                  />
-                </span>
-              ) : undefined
-            }
+          <SparklineComparisonContext.Provider value={sparklineComparison}>
+            <DiscoverGrid
+              ariaLabelledBy="documentsAriaLabel"
+              cascadedDocumentsContext={cascadedDocumentsContext}
+              columns={currentColumns}
+              expandedDoc={
+                expandedDocOwner === DEFAULT_EXPANDED_DOC_OWNER ? expandedDoc : undefined
+              }
+              dataView={dataView}
+              dataSource={currentDataSource}
+              loadingState={
+                isDataLoading
+                  ? DataLoadingState.loading
+                  : isMoreDataLoading
+                  ? DataLoadingState.loadingMore
+                  : DataLoadingState.loaded
+              }
+              rows={rows}
+              sort={(sort as SortOrder[]) || []}
+              searchDescription={persistedDiscoverSession?.description}
+              searchTitle={persistedDiscoverSession?.title} // TODO: should it be rather a tab label?
+              setExpandedDoc={setExpandedDocForDefaultOwner}
+              showTimeCol={showTimeCol}
+              settings={grid}
+              onFilter={onAddFilter as DocViewFilterFn}
+              onOpenInNewTab={onOpenInNewTab}
+              onSetColumns={onSetColumns}
+              onSort={onSort}
+              onResize={onResizeDataGrid}
+              configHeaderRowHeight={3}
+              headerRowHeightState={headerRowHeight}
+              onUpdateHeaderRowHeight={onUpdateHeaderRowHeight}
+              rowHeightState={rowHeight}
+              onUpdateRowHeight={onUpdateRowHeight}
+              isSortEnabled={true}
+              isPaginationEnabled={!isEsqlMode}
+              rowsPerPageState={rowsPerPage ?? getDefaultRowsPerPage(services.uiSettings)}
+              onUpdateRowsPerPage={onUpdateRowsPerPage}
+              maxAllowedSampleSize={getMaxAllowedSampleSize(services.uiSettings)}
+              sampleSizeState={getAllowedSampleSize(sampleSizeState, services.uiSettings)}
+              onUpdateSampleSize={!isEsqlMode ? onUpdateSampleSize : undefined}
+              onFieldEdited={onFieldEdited}
+              configRowHeight={configRowHeight}
+              showMultiFields={uiSettings.get(SHOW_MULTIFIELDS)}
+              maxDocFieldsDisplayed={uiSettings.get(MAX_DOC_FIELDS_DISPLAYED)}
+              externalAdditionalControls={
+                approximationApplied ? (
+                  <span style={{ marginRight: 4 }}>
+                    <ApproximationBadge
+                      isApproximationApplied
+                      data-test-subj="discoverApproximationApplied"
+                    />
+                  </span>
+                ) : undefined
+              }
             histogramComparisonEnabled={gridHistogramComparisonEnabled}
-            getRowClassName={getRowClassName}
             renderDocumentView="external"
-            setRenderDocumentViewMeta={setRenderDocumentViewMetaForDefaultOwner}
-            renderCustomToolbar={renderCustomToolbarWithElements}
-            services={services}
-            totalHits={totalHits}
-            onFetchMoreRecords={onFetchMoreRecords}
-            externalCustomRenderers={cellRenderers}
-            dataGridDensityState={density}
-            onUpdateDataGridDensity={onUpdateDensity}
-            query={query}
-            filters={filters}
-            esqlVariables={esqlVariables}
-            cellActionsTriggerId={DISCOVER_CELL_ACTIONS_TRIGGER_ID}
-            cellActionsMetadata={cellActionsMetadata}
-            cellActionsHandling="append"
-            initialState={dataGridUiState}
-            onInitialStateChange={onInitialStateChange}
-            onFullScreenChange={setIsDataGridFullScreen}
-            documentsDisplayModeState={documentsDisplayMode}
-            onUpdateDocumentsDisplayMode={onUpdateDocumentsDisplayMode}
-            jsonModeSettingsState={jsonModeSettings}
-            onUpdateJsonModeSettings={onUpdateJsonModeSettings}
-          />
+              setRenderDocumentViewMeta={setRenderDocumentViewMetaForDefaultOwner}
+              renderCustomToolbar={renderCustomToolbarWithElements}
+              services={services}
+              totalHits={totalHits}
+              onFetchMoreRecords={onFetchMoreRecords}
+              externalCustomRenderers={cellRenderers}
+              dataGridDensityState={density}
+              onUpdateDataGridDensity={onUpdateDensity}
+              query={query}
+              filters={filters}
+              esqlVariables={esqlVariables}
+              cellActionsTriggerId={DISCOVER_CELL_ACTIONS_TRIGGER_ID}
+              cellActionsMetadata={cellActionsMetadata}
+              cellActionsHandling="append"
+              initialState={dataGridUiState}
+              onInitialStateChange={onInitialStateChange}
+              onFullScreenChange={setIsDataGridFullScreen}
+              documentsDisplayModeState={documentsDisplayMode}
+              onUpdateDocumentsDisplayMode={onUpdateDocumentsDisplayMode}
+              jsonModeSettingsState={jsonModeSettings}
+              onUpdateJsonModeSettings={onUpdateJsonModeSettings}
+            />
+          </SparklineComparisonContext.Provider>
         </CellActionsProvider>
       </div>
     </EuiFlexItem>
@@ -759,14 +762,10 @@ const componentStyles = {
     height: '100%',
     width: '100%',
   }),
-  dataTable: ({ euiTheme }: UseEuiTheme) =>
-    css({
-      width: '100%',
-      maxWidth: '100%',
-      height: '100%',
-      overflow: 'hidden',
-      [`.${HISTOGRAM_COMPARISON_ROW_CLASS}`]: {
-        backgroundColor: euiTheme.colors.backgroundBaseAccent,
-      },
-    }),
+  dataTable: css({
+    width: '100%',
+    maxWidth: '100%',
+    height: '100%',
+    overflow: 'hidden',
+  }),
 };
