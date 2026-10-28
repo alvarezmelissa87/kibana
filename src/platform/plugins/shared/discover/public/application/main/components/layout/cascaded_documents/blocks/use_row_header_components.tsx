@@ -22,10 +22,12 @@ import {
 import { css } from '@emotion/react';
 import {
   EuiBadge,
+  EuiButtonIcon,
   EuiContextMenu,
   EuiFlexGroup,
   EuiFlexItem,
   EuiText,
+  EuiToolTip,
   EuiWrappingPopover,
   copyToClipboard,
   useEuiTheme,
@@ -389,14 +391,6 @@ const NO_VALUE_PLACEHOLDER = i18n.translate('discover.dataCascade.row.action.noV
   defaultMessage: '(blank)',
 });
 
-const compareLabel = i18n.translate('discover.dataCascade.row.action.compare', {
-  defaultMessage: 'Compare',
-});
-
-const stopComparingLabel = i18n.translate('discover.dataCascade.row.action.stopComparing', {
-  defaultMessage: 'Stop comparing',
-});
-
 const compareWithTotalLabel = i18n.translate('discover.dataCascade.row.action.compareWithTotal', {
   defaultMessage: 'Compare with total',
 });
@@ -408,8 +402,15 @@ const stopComparingWithTotalLabel = i18n.translate(
   }
 );
 
-const comparingLabel = i18n.translate('discover.dataCascade.row.comparingBadge', {
-  defaultMessage: 'Comparing',
+const compareThisPatternLabel = i18n.translate(
+  'discover.dataCascade.row.action.compareThisPattern',
+  {
+    defaultMessage: 'Compare this pattern',
+  }
+);
+
+const removeComparisonLabel = i18n.translate('discover.dataCascade.row.action.removeComparison', {
+  defaultMessage: 'Remove comparison',
 });
 
 const getArrayBadgeDisplayValue = (value: string | number) =>
@@ -449,28 +450,10 @@ export function useEsqlDataCascadeRowHeaderComponents(
       const type = editorQueryMeta.groupByFields.find((field) => field.field === rowGroup)?.type;
 
       if (type && /categorize/i.test(type)) {
-        const pattern = (
+        return (
           <div data-test-subj={`${rowData.id}-dscCascadeRowTitlePatternCellRenderer`}>
             {getPatternCellRenderer(rowData.groupValue, false)}
           </div>
-        );
-
-        if (!histogramComparison?.isSelected(rowData)) {
-          return pattern;
-        }
-
-        return (
-          <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
-            <EuiFlexItem grow={false}>
-              <EuiBadge
-                color="primary"
-                data-test-subj={`${rowData.id}-dscCascadeRowComparingBadge`}
-              >
-                {comparingLabel}
-              </EuiBadge>
-            </EuiFlexItem>
-            <EuiFlexItem css={rowHeaderTitleStyles.textWrapper}>{pattern}</EuiFlexItem>
-          </EuiFlexGroup>
         );
       }
 
@@ -485,7 +468,7 @@ export function useEsqlDataCascadeRowHeaderComponents(
         </EuiText>
       );
     },
-    [editorQueryMeta.groupByFields, histogramComparison]
+    [editorQueryMeta.groupByFields]
   );
 
   /**
@@ -494,74 +477,110 @@ export function useEsqlDataCascadeRowHeaderComponents(
   const rowHeaderMeta = useCallback<
     NonNullable<DataCascadeRowProps<ESQLDataGroupNode, DataTableRecord>['rowHeaderMetaSlots']>
   >(
-    ({ rowData }) =>
-      selectedColumns
-        .map((selectedColumn) => {
-          if (!aggregateColumnIdentifiers.has(selectedColumn)) {
-            return null;
-          }
+    ({ rowData }) => {
+      const slots = selectedColumns.flatMap((selectedColumn) => {
+        if (!aggregateColumnIdentifiers.has(selectedColumn)) {
+          return [];
+        }
 
-          const aggregatedValue = rowData.aggregatedValues[selectedColumn];
-          const isArrayType =
-            Array.isArray(aggregatedValue) ||
-            (aggregatedValue === undefined && columnTypes.get(selectedColumn) === 'array');
+        const aggregatedValue = rowData.aggregatedValues[selectedColumn];
+        const isArrayType =
+          Array.isArray(aggregatedValue) ||
+          (aggregatedValue === undefined && columnTypes.get(selectedColumn) === 'array');
 
-          const aggregation = editorQueryMeta.appliedFunctions.find(
-            ({ identifier }) => identifier === selectedColumn
-          )?.aggregation;
+        const aggregation = editorQueryMeta.appliedFunctions.find(
+          ({ identifier }) => identifier === selectedColumn
+        )?.aggregation;
 
-          if (aggregation && /sparkline/i.test(aggregation) && isArrayType) {
-            return (
-              <EuiFlexGroup alignItems="stretch" gutterSize="s" responsive={false}>
-                <EuiFlexItem grow={false} css={{ width: '100px', minHeight: euiTheme.size.l }}>
-                  <SparklineRenderer charts={services.charts} values={aggregatedValue} />
-                </EuiFlexItem>
-              </EuiFlexGroup>
-            );
-          }
+        if (aggregation && /sparkline/i.test(aggregation) && isArrayType) {
+          return [
+            <EuiFlexGroup alignItems="stretch" gutterSize="s" responsive={false}>
+              <EuiFlexItem grow={false} css={{ width: '100px', minHeight: euiTheme.size.l }}>
+                <SparklineRenderer
+                  charts={services.charts}
+                  isSelected={histogramComparison?.isSelected(rowData) ?? false}
+                  values={aggregatedValue}
+                />
+              </EuiFlexItem>
+            </EuiFlexGroup>,
+          ];
+        }
 
-          return (
-            <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
-              <FormattedMessage
-                id="discover.dataCascade.grouping.function"
-                defaultMessage="<bold>{selectedColumn}:</bold> <badge></badge>"
-                values={{
-                  selectedColumn,
-                  bold: (chunks) => (
-                    <EuiFlexItem grow={false} css={rowHeaderTitleStyles.textWrapper}>
-                      <span css={rowHeaderTitleStyles.textInner}>{chunks}</span>
-                    </EuiFlexItem>
-                  ),
-                  badge: () => {
-                    if (isArrayType) {
-                      return (
-                        <EuiFlexItem grow={false}>
-                          <EuiBadge color="hollow" css={textSlotStyles}>
-                            {Array.isArray(aggregatedValue)
-                              ? aggregatedValue.map(getArrayBadgeDisplayValue).join(', ')
-                              : '-'}
-                          </EuiBadge>
-                        </EuiFlexItem>
-                      );
-                    }
-
+        return [
+          <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
+            <FormattedMessage
+              id="discover.dataCascade.grouping.function"
+              defaultMessage="<bold>{selectedColumn}:</bold> <badge></badge>"
+              values={{
+                selectedColumn,
+                bold: (chunks) => (
+                  <EuiFlexItem grow={false} css={rowHeaderTitleStyles.textWrapper}>
+                    <span css={rowHeaderTitleStyles.textInner}>{chunks}</span>
+                  </EuiFlexItem>
+                ),
+                badge: () => {
+                  if (isArrayType) {
                     return (
                       <EuiFlexItem grow={false}>
-                        <NumberBadge value={Number(aggregatedValue)} shortenAtExpSize={3} />
+                        <EuiBadge color="hollow" css={textSlotStyles}>
+                          {Array.isArray(aggregatedValue)
+                            ? aggregatedValue.map(getArrayBadgeDisplayValue).join(', ')
+                            : '-'}
+                        </EuiBadge>
                       </EuiFlexItem>
                     );
-                  },
-                }}
-              />
-            </EuiFlexGroup>
-          );
-        })
-        .filter(Boolean),
+                  }
+
+                  return (
+                    <EuiFlexItem grow={false}>
+                      <NumberBadge value={Number(aggregatedValue)} shortenAtExpSize={3} />
+                    </EuiFlexItem>
+                  );
+                },
+              }}
+            />
+          </EuiFlexGroup>,
+        ];
+      });
+
+      // Place Compare on the right edge of the last stats section, next to the row menu.
+      if (histogramComparison && !isMobile && isComparableGroup(rowData) && slots.length > 0) {
+        const selected = histogramComparison.isSelected(rowData);
+        const lastIndex = slots.length - 1;
+
+        slots[lastIndex] = (
+          <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
+            <EuiFlexItem grow={false}>{slots[lastIndex]}</EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiToolTip
+                content={selected ? removeComparisonLabel : compareThisPatternLabel}
+                disableScreenReaderOutput
+                position="top"
+              >
+                <EuiButtonIcon
+                  size="xs"
+                  color="text"
+                  iconSize="s"
+                  iconType={selected ? 'eyeSlash' : 'eye'}
+                  aria-label={selected ? stopComparingWithTotalLabel : compareWithTotalLabel}
+                  data-test-subj={`${rowData.id}-dscCascadeRowCompareWithTotalButton`}
+                  onClick={() => histogramComparison.toggle(rowData)}
+                />
+              </EuiToolTip>
+            </EuiFlexItem>
+          </EuiFlexGroup>
+        );
+      }
+
+      return slots;
+    },
     [
       aggregateColumnIdentifiers,
       columnTypes,
       editorQueryMeta,
       euiTheme.size.l,
+      histogramComparison,
+      isMobile,
       selectedColumns,
       services.charts,
     ]
@@ -573,32 +592,16 @@ export function useEsqlDataCascadeRowHeaderComponents(
     ({ rowData, nodePath }) => {
       const groupId = nodePath[nodePath.length - 1];
       const groupValue = rowData.groupValue;
-      const contextAction = {
-        iconType: 'boxesVertical',
-        'aria-label': `${rowData.id}-cascade-row-actions`,
-        'data-test-subj': `${rowData.id}-dscCascadeRowContextActionButton`,
-        onClick: togglePopover?.bind({ groupId, groupValue }),
-      };
-
-      // The cascade moves every action into an overflow menu on mobile, where the unlabeled row menu can't open.
-      if (!histogramComparison || isMobile || !isComparableGroup(rowData)) {
-        return [contextAction];
-      }
-
-      const selected = histogramComparison.isSelected(rowData);
-
       return [
         {
-          iconType: 'chartBarVerticalStack',
-          label: selected ? stopComparingLabel : compareLabel,
-          'aria-label': selected ? stopComparingWithTotalLabel : compareWithTotalLabel,
-          'data-test-subj': `${rowData.id}-dscCascadeRowCompareWithTotalButton`,
-          onClick: () => histogramComparison.toggle(rowData),
+          iconType: 'boxesVertical',
+          'aria-label': `${rowData.id}-cascade-row-actions`,
+          'data-test-subj': `${rowData.id}-dscCascadeRowContextActionButton`,
+          onClick: togglePopover?.bind({ groupId, groupValue }),
         },
-        contextAction,
       ];
     },
-    [histogramComparison, isMobile, togglePopover]
+    [togglePopover]
   );
 
   return useMemo(

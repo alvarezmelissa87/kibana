@@ -375,8 +375,6 @@ describe('Discover documents layout', () => {
         expect(discoverGridProps?.histogramComparisonEnabled).toBe(true);
         expect(discoverGridProps?.visibleRowLeadingControls).toBeUndefined();
       });
-      const { getRowClassName } = discoverGridMock.mock.lastCall?.[0] ?? {};
-      expect(getRowClassName?.(buildDataTableRecord(esHitsMock[0]))).toBeUndefined();
     });
 
     it('does not pass the compare action while the cascade layout is active', async () => {

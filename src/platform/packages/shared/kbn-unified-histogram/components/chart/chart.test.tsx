@@ -492,13 +492,8 @@ describe('Chart', () => {
       onClear: jest.fn(),
     });
     const expectComparisonStatus = (status: 'loading' | 'applied' | 'unavailable') => {
-      const loading = screen.queryByTestId('unifiedHistogramComparisonLoading');
+      expect(screen.queryByTestId('unifiedHistogramComparisonLoading')).not.toBeInTheDocument();
       const note = screen.queryByTestId('unifiedHistogramComparisonNote');
-      if (status === 'loading') {
-        expect(loading).toBeInTheDocument();
-        return;
-      }
-      expect(loading).not.toBeInTheDocument();
       if (status === 'unavailable') {
         expect(note).toHaveTextContent('Comparison is unavailable.');
         return;
@@ -658,14 +653,23 @@ describe('Chart', () => {
       expectComparisonStatus('loading');
     });
 
-    it('shows the selection in a toolbar badge that tracks the comparison status', async () => {
+    it('shows the selection in a toolbar badge before the chart actions, without a loading indicator', async () => {
       const comparison = createComparison();
       await mountHistogramComparison(comparison);
 
-      expect(screen.getByTestId('unifiedHistogramComparisonBadge')).toHaveTextContent(
-        'Failed login'
+      const badge = screen.getByTestId('unifiedHistogramComparisonBadge');
+      expect(badge).toHaveTextContent('Failed login');
+      expect(badge.closest('[data-toolbar-section="right"]')).toBeTruthy();
+      expect(badge.closest('[data-toolbar-section="left"]')).toBeNull();
+      expect(screen.queryByTestId('unifiedHistogramComparisonLoading')).not.toBeInTheDocument();
+      const editButton = screen.getByTestId('unifiedHistogramEditFlyoutVisualization');
+      const saveButton = screen.getByTestId('unifiedHistogramSaveVisualization');
+      expect(badge.compareDocumentPosition(editButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING
       );
-      expect(screen.getByTestId('unifiedHistogramComparisonLoading')).toBeInTheDocument();
+      expect(badge.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING
+      );
 
       await act(async () => {
         lastLensProps().onLoad?.(false, histogramAdapters());
